@@ -1,12 +1,4 @@
 ################################################################################
-# HEADER INFORMATION
-################################################################################
-# Author: Khusel Avirmed 
-# Data processing: Each *MortalitySuboptiamTemp_data_processing_v2.R must be run beforehand for full replication
-# Last updated: 9/17/2025
-################################################################################
-
-################################################################################
 # ENVIRONMENT SETUP
 ################################################################################
 
@@ -297,8 +289,10 @@ for (model_name in names(model_formula_list)[7:8]) {
       message("Bootstrapping: ", i)
       
       # Resample spatial units with replacement
-      sampled_units <- sample(unique(mort[['adm_id']]), size = length(unique(mort[['adm_id']])), replace = TRUE)
-      dtboot <- mort[adm_id %in% sampled_units]
+      sampled_units <- unique_ids[sample.int(n_units, n_units, replace = TRUE)]
+      dtboot <- mort[.(sampled_units), allow.cartesian = TRUE]
+      
+      # dtboot <- mort[adm_id %in% sampled_units]
       
       if (is.null(weights)) {
         if (log_rate == TRUE) {
