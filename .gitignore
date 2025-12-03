@@ -1,0 +1,5 @@
+*.rds
+*.pq
+*.DS_Store
+*.README.html
+*.pdf
