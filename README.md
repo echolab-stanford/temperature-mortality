@@ -4,9 +4,26 @@ Code repository for "Understanding and addressing temperature impacts on mortali
 
 ### System Requirements
 
-- All software dependencies and operating systems (including version numbers). 
-- Versions the software has been tested on. 
-- Any required non-standard hardware.
+**Software Dependencies:**
+- R version 4.5.1 (or later)
+- Required R packages:
+
+  - `arrow` - for reading parquet files
+  - `fastverse`
+  - `tidyverse`
+  - `fixest`
+  - `matrixStats` 
+  - `ISOweek`
+
+**Operating System:**
+
+- Tested on: macOS Sequoia 15.6.1
+- Should work on any OS that supports R
+
+**Hardware:**
+
+- Minimum 16GB RAM recommended (for large datasets)
+- At least 10GB free disk space for data files
 
 ### Installation Guide
 
@@ -22,6 +39,11 @@ Instructions and typical install time on a normal desktop computer.
 2. Set working directory in R:
 - Recommended: Open temperature-mortality.Rproj in RStudio (create via File → New Project → Existing Directory if needed)
 - Alternative: Use `setwd()` to point to your cloned directory: `setwd("~/path/to/temperature-mortality")`
+
+3. Typical install time ~ 5-10 mins
+- Cloning the repo itself is very fast (<1 minute) since it's just code
+- The main time is installing R packages (5-10 minutes typical for common packages)
+- If users already have some packages installed, it will be faster
 
 ### Replication Instructions
 

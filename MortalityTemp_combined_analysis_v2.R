@@ -17,36 +17,32 @@ setFixest_nthreads(6, save = TRUE)
 # DIRECTORY AND PATH SETUP
 ################################################################################
 
-setwd("~/BurkeLab Dropbox/projects/temperature-mortality-descriptive")
+# setwd("~/path/to/temperature-mortality")
+setwd("~/BurkeLab Dropbox/projects/temperature-mortality")
 
 # Define main parameters
 # To replicate analysis, you can set the following parameters
 # outputs from this script will be saved in "processed" folder for respective countries
 # for combined figures, we will run different script
-country_name <- "EU" # Other options: EU, MEX
+country_name <- "US" # Other options: EU, MEX
 # if one wants to replicate supplmentary figure inputs
 # options include: log_rate, same_year, age_standardized, data_1990_2023 (only when country_name == MEX) or winsor 
-si_folder <- "log_rate" 
+si_folder <- "winsor" 
 
 # Set up directory structure
-script_dir <- 'script'
 data_dir <- 'data'
-raw_dir <- paste(data_dir, country_name, "raw", sep = "/")
 cleaned_dir <- paste(data_dir, country_name, "cleaned", sep = "/")
 processed_dir <- 'processed'
 processed_country_dir <- paste(processed_dir, country_name, sep = "/")
-fig_dir <- "fig"
-fig_country_dir <- paste(fig_dir, country_name, sep = "/")
 
 # Load helper functions and data
 # source(paste(script_dir, "helper_functions.R", sep = "/"))
 mort <- read_parquet( paste(cleaned_dir, paste0(country_name, "FullPanel_complete.pq"), sep = "/") )
-temp_bins <- read_parquet(paste(cleaned_dir, paste0(country_name, "TempBins_monthly_complete.pq"), sep = "/") )
+temp_bins <- read_parquet( paste(cleaned_dir, paste0(country_name, "TempBins_monthly_complete.pq"), sep = "/") )
 daily_temp <- read_parquet( paste(cleaned_dir, paste0(country_name, "Daily_temp_covariates.pq"), sep = "/") )
 setDT(mort)
 setDT(temp_bins)
 setDT(daily_temp)
-# load(paste(processed_country_dir, paste0(country_name, "AnnualBinned_person_day_exposure.RData"), sep = "/"))
 
 ################################################################################
 # COUNTRY-SPECIFIC DATA PREPARATION
@@ -210,44 +206,6 @@ model_formula_list <- list(
   "baseline" = baseline_model_formula
 )
 
-# fips_needed <- unique(mort[as.integer(temp_percentile) <= as.integer(20)]$adm_id)
-# # data <- mort[as.integer(temp_percentile) <= as.integer(10)]
-# data <- mort[adm_id %in% fips_needed]
-# 
-# coefs <- feols(formula, data = data, weights = NULL, only.coef = TRUE)
-# 
-# pred_temp_range <- -50:50
-# pred_temps_poly <- poly(pred_temp_range, degree = 4, raw = TRUE)
-# coefs_before_sum <- t(as.matrix(coefs)) 
-# coefs_sum <- sapply(poly_groups, function(poly) {
-#   # Identify columns matching the polynomial group (e.g., temp_d1_lag1, temp_d1_lag2)
-#   poly_names = colnames(coefs_before_sum)[grepl(poly, colnames(coefs_before_sum)) & !grepl("prec", colnames(coefs_before_sum))]
-#   rowSums(coefs_before_sum[, poly_names, drop = FALSE])  # Sum across lags
-# })
-# 
-# coefs_sum <- t(as.matrix(coefs_sum))  # Transpose back to original orientation
-# 
-# mmt <- 14
-# mmt_matrix <- poly(mmt, degree = 4, raw = T)  # Create polynomial terms for MMT
-# pred_temps_scaled <- scale(pred_temps_poly, center = mmt_matrix, scale = FALSE)  # Center temps at MMT
-# 
-# pred_vector <- pred_temps_scaled %*% t(coefs_sum)
-# 
-# 
-# plot(pred_temp_range[30:90], pred_vector[30:90]*100000, 
-#      type = "l", col = "blue", lwd = 2,
-#      xlab = "Temperature Range", ylab = "Change in deaths per 100K")
-# 
-# # Prepare the second data series
-# 
-# second_vector <- US_temp$response %>%
-#   filter(key == "10%") %>% 
-#   filter(bins >= -21 & bins <= 39) %>% 
-#   pull(pred)
-# 
-# # Add the second line to the existing plot
-# lines(pred_temp_range[30:90], second_vector*100000, col = "red", lwd = 2, lty = 2)
-
 ################################################################################
 # MAIN ANALYSIS LOOP
 ################################################################################
@@ -258,8 +216,8 @@ if (si_folder == "same_year") {
 }
 
 # Main loop through models
-for (model_name in names(model_formula_list)[7:8]) { 
-  
+for (model_name in names(model_formula_list)[8:8]) { 
+
   # model_name <- "baseline"
   message("Processing model: ", model_name)
   
@@ -284,6 +242,10 @@ for (model_name in names(model_formula_list)[7:8]) {
     
     options(warn = -1)
     set.seed(12)
+    
+    setkey(mort, adm_id)
+    unique_ids <- unique(mort$adm_id)
+    n_units <- length(unique_ids)
     
     results <- lapply(1:Nboot, function(i) {
       message("Bootstrapping: ", i)
@@ -329,6 +291,7 @@ for (model_name in names(model_formula_list)[7:8]) {
   ############################################################################
   # SECTION 2: MODEL ESTIMATION
   ############################################################################
+  setkey(mort, adm_id)
   setDT(bstrap)
   if (log_rate == TRUE) {
     coefs <- feglm(formula, family = "quasipoisson", data = mort, weights = NULL, only.coef = TRUE)
@@ -594,7 +557,7 @@ for (model_name in names(model_formula_list)[7:8]) {
     # cumulative effect of lags amd keep matrix format
     poly_groups <- c("temp_d1", "temp_d2", "temp_d3", "temp_d4")
     coefs_sum <- sapply(poly_groups, function(poly) {
-      poly_names = colnames(coefs_before_sum)[grepl(poly, colnames(coefs_before_sum)) & !grepl("prec", colnames(coefs_before_sum))] # THIS WAS CAUSING ALL ISSUES 
+      poly_names = colnames(coefs_before_sum)[grepl(poly, colnames(coefs_before_sum)) & !grepl("prec", colnames(coefs_before_sum))]
       rowSums(coefs_before_sum[, poly_names, drop = FALSE])
     })
     
@@ -654,7 +617,7 @@ for (model_name in names(model_formula_list)[7:8]) {
       # Sum coefficients by poly group (vectorized)
       poly_groups <- c("temp_d1", "temp_d2", "temp_d3", "temp_d4")
       bst_coefs_sum <- sapply(poly_groups, function(poly) {
-        poly_names = colnames(bst_coefs_before_sum)[grepl(poly, colnames(bst_coefs_before_sum)) & !grepl("prec", colnames(bst_coefs_before_sum))] # THIS WAS CAUSING ALL ISSUES
+        poly_names = colnames(bst_coefs_before_sum)[grepl(poly, colnames(bst_coefs_before_sum)) & !grepl("prec", colnames(bst_coefs_before_sum))]
         rowSums(bst_coefs_before_sum[, poly_names, drop = FALSE])
       })
       
@@ -738,7 +701,7 @@ for (model_name in names(model_formula_list)[7:8]) {
       # deaths by year and side
       deaths_by_year_side <- current_narrow_panel %>% 
         group_by(year, side) %>% 
-        summarise(across(starts_with("b"), ~sum(.x, na.rm = T))) %>% 
+        summarise(across(starts_with("b"), ~sum(.x, na.rm = T)), .groups = "drop") %>% 
         ungroup() %>% group_by(year, side) %>%  
         summarise(
           deaths = mean(c_across(starts_with("b")), na.rm = TRUE),
@@ -827,7 +790,7 @@ for (model_name in names(model_formula_list)[7:8]) {
         # Sum coefficients by poly group (vectorized)
         poly_groups <- c("temp_d1", "temp_d2", "temp_d3", "temp_d4")
         bst_coefs_sum <- sapply(poly_groups, function(poly) {
-          poly_names = colnames(bst_coefs_before_sum)[grepl(poly, colnames(bst_coefs_before_sum)) & !grepl("prec", colnames(bst_coefs_before_sum))] # THIS WAS CAUSING ALL ISSUES
+          poly_names = colnames(bst_coefs_before_sum)[grepl(poly, colnames(bst_coefs_before_sum)) & !grepl("prec", colnames(bst_coefs_before_sum))]
           rowSums(bst_coefs_before_sum[, poly_names, drop = FALSE])
         })
         
@@ -993,7 +956,7 @@ for (model_name in names(model_formula_list)[7:8]) {
           # Sum coefficients by poly group (vectorized)
           poly_groups <- c("temp_d1", "temp_d2", "temp_d3", "temp_d4")
           bst_coefs_sum <- sapply(poly_groups, function(poly) {
-            poly_names = colnames(bst_coefs_before_sum)[grepl(poly, colnames(bst_coefs_before_sum)) & !grepl("prec", colnames(bst_coefs_before_sum))] # THIS WAS CAUSING ALL ISSUES
+            poly_names = colnames(bst_coefs_before_sum)[grepl(poly, colnames(bst_coefs_before_sum)) & !grepl("prec", colnames(bst_coefs_before_sum))]
             rowSums(bst_coefs_before_sum[, poly_names, drop = FALSE])
           })
           
