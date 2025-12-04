@@ -22,8 +22,8 @@ Code repository for "Understanding and addressing temperature impacts on mortali
 
 **Hardware:**
 
-- Minimum 16GB RAM recommended (for large datasets)
-- At least 10GB free disk space for data files
+- Minimum 24GB RAM recommended (for large datasets)
+- At least 15GB free disk space for data files
 
 ### Installation Guide
 
@@ -47,7 +47,9 @@ Instructions and typical install time on a normal desktop computer.
 
 ### Replication Instructions
 
-### Step 1: Download and Organize Data
+#### Figures 1, 2, 3, S1, S2, and S9
+
+##### Step 1: Download and Organize Data
 
 Download each country's data and place files in `data/[country_name]/cleaned`, where `country_name` is MEX, EU, or US. For each country, the data include three parquet files:
 
@@ -71,7 +73,7 @@ Download each country's data and place files in `data/[country_name]/cleaned`, w
 
 The US data are restricted use and available by application to the CDC and are not provided.
 
-### Step 2: Generate Analysis Dataframes
+##### Step 2: Generate Analysis Dataframes
 
 Run `MortalityTemp_combined_analysis_v2.R` to generate dataframes for plotting figures in the paper. The resulting outputs including bootstrap and plot dataframes will be saved in `processed/[country_name]`.
 
@@ -95,7 +97,7 @@ The `MortalityTemp_combined_analysis_v2.R` script requires several configuration
 - Set `si_folder` = ["age_standardized"]
 - Dataframes will be saved in `processed/[country_name]/age_standardized` (age standardized rate as outcome)
 
-### Step 3: Generate Figures
+##### Step 3: Generate Figures
 
 After completing Step 2, run `MortalityTemp_combined_plots_v2.R` to generate figures. The resulting figures will be saved in `fig/combined/`:
 
@@ -106,6 +108,35 @@ After completing Step 2, run `MortalityTemp_combined_plots_v2.R` to generate fig
 - Figure S2: `fig_2_age_std_us_mex.pdf`
 - Figure S9: `decade_fixed1970.pdf`
 
-### Expected Output and Runtime
+##### Figures 4 and 5
+
+##### Step 1: Download and Organize Data
+
+US data: 
+
+1. `singleage_adjustment.csv`[~8.35KB](https://www.dropbox.com/scl/fi/74053cyzuoha47j3dfa0k/singleage_adjustment.csv?rlkey=266eo3eugc0chixzfurmk7a3n&dl=0)
+2. `pop_panel_singleage.pq`[~27.96MB](https://www.dropbox.com/scl/fi/zdes5va6xlmpdbr6dk9n6/pop_panel_singleage.pq?rlkey=f4len1nozbshac0q3bzg168ps&dl=0)
+3. `us_temp.pq` [~1.96GB](https://www.dropbox.com/scl/fi/4zjz4gos7sd8bbul1mw2y/us_temp.pq?rlkey=k2xv5hzwa6xslnmcyfgnnw0wn&dl=0)
+4. `us_precip.pq` [~823.33MB](https://www.dropbox.com/scl/fi/ppmm5er5k86c1l7mq14tt/us_precip.pq?rlkey=3wndfp4w202mksbjlousik3c5&dl=0)
+5. `fully_monthly.pq` - data is not public so cannot be shared for replication
+
+Mexico data:
+
+1. `daily_death_pop_income.pq` [~366.5MB](https://www.dropbox.com/scl/fi/szfowpm04zjmizvw866yq/daily_death_pop_income.pq?rlkey=h5bjwtmf7kew0zj0f5by38ic8&dl=0)
+2. `mexico_temp.pq` [~1.52GB](https://www.dropbox.com/scl/fi/hv37en54tbyhgbaogfzuc/mexico_temp.pq?rlkey=7nul80l3auua579j3tmc4hq2v&dl=0)
+3. `mexico_precip.pq` [~653.19MB](https://www.dropbox.com/scl/fi/g5ikw804xf4l2mtxcgzr9/mexico_precip.pq?rlkey=j2z2y136k5b2d0j0j33ballmw&dl=0)
+4. `adm2_to_order.csv` [~29.42KB](https://www.dropbox.com/scl/fi/06my16kddud0pg9pb1jag/adm2_to_order.csv?rlkey=xmxfo2ymhp45tw2r0j3gt0vca&dl=0)
+5. `monthly_death_pop_income.pq` [~302.46MB](https://www.dropbox.com/scl/fi/kdmxy0kyblzdpjc8rudtz/monthly_death_pop_income.pq?rlkey=487n9d7gclc1hcv65ufwkfsbl&dl=0)
+6. `monthly_weather.pq` [~2.33GB](https://www.dropbox.com/scl/fi/a25gcczxtx7jhu7vv1g0p/monthly_weather.pq?rlkey=5vpl3qdxu0jijzl3d6gni2dlc&dl=0)
+7. `full_monthly.pq` [~1.69GB](https://www.dropbox.com/scl/fi/emswcm2vhz26cpmgao44r/full_monthly.pq?rlkey=qt0jlm01yarkogb2bn5q05342&dl=0)
+
+##### Step 2: Generate Figures
+
+Run the following scripts to generate figures. The resulting figures will be saved in `fig/combined/`:
+
+- For Figure 4: Run `age_lag_response_us_mexico.R` -> outputs `lag_age_response.pdf`
+- Fpr Figure 5: Run `by_cause_us_mexico.R` -> outputs `cause.pdf`
+
+#### Expected Output and Runtime
 
 Expected output and expected run time for execution on a normal desktop computer: ...
