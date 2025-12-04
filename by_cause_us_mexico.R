@@ -42,10 +42,9 @@ okabe_colors <- c('#D55E00','#0072B2','#009E73','#CC79A7','#000000','#E69F00','#
 # --- Mexico mortality by cause ---
 
 # Load monthly mortality file, construct adm1, restrict to ≤2019
-mexico_mort <- read_parquet('data/mexico/full_monthly.pq') %>% 
+mexico_mort <- read_parquet('data/MEX/full_monthly.pq') %>% 
   mutate(adm1 = adm2 %/% 1e3) %>% 
   filter(year <= 2019)
-# {https://www.dropbox.com/scl/fi/emswcm2vhz26cpmgao44r/full_monthly.pq?rlkey=qt0jlm01yarkogb2bn5q05342&dl=0}
 
 # Population (average per year)
 mexico_pops <- mexico_mort %>% 
@@ -54,14 +53,14 @@ mexico_pops <- mexico_mort %>%
   as.data.table()
 
 # Weather dataset (ERA5 temperature exposure)
-mexico_weather <- open_dataset('data/mexico/met/mexico_temp.pq') %>% 
+mexico_weather <- open_dataset('data/MEX/mexico_temp.pq') %>% 
   filter(year >= 1990, year <= 2019) %>% 
   select(temp = order_1, year, month, day, poly_id) %>% 
   mutate(year = as.integer(year), poly_id = as.integer(poly_id)) %>% 
   collect()
 
 # Mapping between grid polygons and administrative units
-adm2_mapping <- open_dataset('data/mexico/geometry/adm2_to_order.csv', format = 'csv')
+adm2_mapping <- open_dataset('data/MEX/adm2_to_order.csv', format = 'csv')
 
 # Merge spatial mapping into weather
 mexico_weather %<>% 
@@ -157,7 +156,7 @@ deaths_by_cause_year_mexico <- rbindlist(deaths_by_cause_year_mexico)
 # --- U.S. mortality by cause ---
 
 # Load U.S. mortality data --- data is not public so cannot be shared for replication
-us_mort <- read_parquet('data/usa/full_monthly.pq') %>% 
+us_mort <- read_parquet('---') %>% 
   mutate(state = fips %/% 1e3) %>% 
   as.data.table()
 
@@ -165,7 +164,7 @@ us_mort <- read_parquet('data/usa/full_monthly.pq') %>%
 us_pops <- us_mort %>% group_by(fips, year) %>% summarize(pop = mean(pop_total))
 
 # U.S. temperature data (ERA5)
-us_weather <- open_dataset('data/usa/met/era5/us_temp.pq') %>% 
+us_weather <- open_dataset('data/US/us_temp.pq') %>% 
   filter(year >= 1969, year <= 2019) %>% 
   select(temp = order_1, year, month, day, fips = poly_id) %>% 
   mutate(year = as.integer(year), fips = as.integer(fips)) %>% 
@@ -274,4 +273,4 @@ cause_multiples <- ggplot(
 cause_multiples
 
 # Save plot
-ggsave(cause_multiples, file = 'output/figures/presentation/cause.pdf', height = 6, width = 10, units = 'in')
+ggsave(cause_multiples, file = 'fig/cause.pdf', height = 6, width = 10, units = 'in')

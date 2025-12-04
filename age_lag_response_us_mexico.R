@@ -5,7 +5,9 @@
 pacman::p_load(fastverse, tidyverse, arrow, pammtools, fixest, tictoc, sf, ggnewscale)
 
 # Set working directory
-setwd('/Users/aw/Dropbox/Research/temp_mortality')
+# setwd("~/path/to/temperature-mortality")
+# setwd('/Users/aw/Dropbox/Research/temp_mortality')
+setwd("~/BurkeLab Dropbox/projects/temperature-mortality")
 
 # Set seed for reproducibility
 set.seed(42)
@@ -40,8 +42,8 @@ age_color_scale2 <- c(age_color_scale1[1:2],'red',age_color_scale1[3:7])
 ## us lag response ------------------------------------------------------------------
 
 # Read single-age adjustment to convert single-year ages into weights
-age_adj <- fread('data/usa/pop/singleage_adjustment.csv', skip = 1)
-# {https://www.dropbox.com/scl/fi/74053cyzuoha47j3dfa0k/singleage_adjustment.csv?rlkey=266eo3eugc0chixzfurmk7a3n&dl=0}
+# age_adj <- fread('data/usa/pop/singleage_adjustment.csv', skip = 1)
+age_adj <- fread('data/US/singleage_adjustment.csv', skip = 1)
 
 # Drop header/footer rows
 age_adj <- age_adj[2:(nrow(age_adj)-4)]
@@ -62,15 +64,15 @@ age_adj$weight <- age_adj$count/sum(age_adj$count)
 age_adj %<>% select(-count)
 
 # Read county-year population totals (single-age panel aggregated)
-pop_panel <- read_parquet('data/usa/pop/pop_panel_singleage.pq')
-# {https://www.dropbox.com/scl/fi/zdes5va6xlmpdbr6dk9n6/pop_panel_singleage.pq?rlkey=f4len1nozbshac0q3bzg168ps&dl=0}
+# pop_panel <- read_parquet('data/usa/pop/pop_panel_singleage.pq')
+pop_panel <- read_parquet('data/US/pop_panel_singleage.pq')
 pop_panel <- pop_panel[, .(pop_total = sum(pop)), by = list(fips, year)]
 
 # Read ERA5 temperature and precipitation datasets
-temp <- open_dataset('data/usa/met/era5/us_temp.pq', format = 'parquet')
-# {https://www.dropbox.com/scl/fi/4zjz4gos7sd8bbul1mw2y/us_temp.pq?rlkey=k2xv5hzwa6xslnmcyfgnnw0wn&dl=0}
-precip <- open_dataset('data/usa/met/era5/us_precip.pq', format = 'parquet')
-# {https://www.dropbox.com/scl/fi/ppmm5er5k86c1l7mq14tt/us_precip.pq?rlkey=3wndfp4w202mksbjlousik3c5&dl=0}
+# temp <- open_dataset('data/usa/met/era5/us_temp.pq', format = 'parquet')
+# precip <- open_dataset('data/usa/met/era5/us_precip.pq', format = 'parquet')
+temp <- open_dataset('data/US/us_temp.pq', format = 'parquet')
+precip <- open_dataset('data/US/us_precip.pq', format = 'parquet')
 
 # Build daily temperature data with 4 polynomial orders
 temp %<>% mutate(date = ymd(paste0(year, '-', month, '-', day))) %>% select(fips = poly_id, date, temp1 = order_1, temp2 = order_2, temp3 = order_3, temp4 = order_4)
@@ -382,12 +384,13 @@ pred_df <- data.table(pred = cumfit,
                       se = cumse)
 
 # Save U.S. lag-response predictions
-write_parquet(pred_df, sink = 'output/usa/lag_response.pq')
+# write_parquet(pred_df, sink = 'output/usa/lag_response.pq')
+write_parquet(pred_df, sink = 'processed/US/lag_response.pq')
 
 ## mexico lag response -------------------------------------------------------------
 
 # Read Mexico daily deaths/population and construct total deaths/pop, plus weights
-df <- arrow::open_dataset("data/mexico/daily_death_pop_income.pq", format = "parquet") %>% 
+df <- arrow::open_dataset("data/MEX/daily_death_pop_income.pq", format = "parquet") %>% 
   rename(date = date.x) %>% 
   select(-date.y) %>% 
   mutate(deaths = young + adult + elderly, 
@@ -395,7 +398,6 @@ df <- arrow::open_dataset("data/mexico/daily_death_pop_income.pq", format = "par
          week = isoweek(date), 
          adm1 = adm2 %/% 1e3) %>% 
   collect()
-# {https://www.dropbox.com/scl/fi/szfowpm04zjmizvw866yq/daily_death_pop_income.pq?rlkey=h5bjwtmf7kew0zj0f5by38ic8&dl=0}
 
 # Sort by geography and date
 df <- df[order(adm2,date)]
@@ -407,14 +409,11 @@ df[, weight := pop / sum(pop), by = date]
 max_lag <- 28
 
 # Read daily Mexican temperature and precipitation grids
-temp <- open_dataset('data/mexico/met/mexico_temp.pq', format = 'parquet')
-# {https://www.dropbox.com/scl/fi/hv37en54tbyhgbaogfzuc/mexico_temp.pq?rlkey=7nul80l3auua579j3tmc4hq2v&dl=0}
-precip <- open_dataset('data/mexico/met/mexico_precip.pq', format = 'parquet')
-# {https://www.dropbox.com/scl/fi/g5ikw804xf4l2mtxcgzr9/mexico_precip.pq?rlkey=j2z2y136k5b2d0j0j33ballmw&dl=0}
+temp <- open_dataset('data/MEX/mexico_temp.pq', format = 'parquet')
+precip <- open_dataset('data/MEX/mexico_precip.pq', format = 'parquet')
 
 # Mapping from polygon order to ADM2 codes
-adm2_mapping <- open_dataset('data/mexico/geometry/adm2_to_order.csv', format = 'csv')
-# {https://www.dropbox.com/scl/fi/06my16kddud0pg9pb1jag/adm2_to_order.csv?rlkey=xmxfo2ymhp45tw2r0j3gt0vca&dl=0}
+adm2_mapping <- open_dataset('data/MEX/adm2_to_order.csv', format = 'csv')
 
 # Merge ADM2 mapping and construct daily temperature series (poly 1–4)
 temp %<>% merge(adm2_mapping, by.x = 'poly_id', by.y = 'order') %>% 
@@ -570,12 +569,12 @@ pred_df <- data.table(pred = cumfit,
                       se = cumse)
 
 # Save Mexico lag-response predictions
-write_parquet(pred_df, sink = 'output/mexico/lag_response.pq')
+write_parquet(pred_df, sink = 'processed/MEX/lag_response.pq')
 
 ## us response by age --------------------------------------------------------------
 
 # Read U.S. population panel by age group
-pop_panel <- read_parquet('data/usa/pop/pop_panel_singleage.pq')
+pop_panel <- read_parquet('data/US/pop_panel_singleage.pq')
 
 # Total county-year population
 total_pop <- pop_panel[, .(pop_total = sum(pop)), by = list(fips, year)]
@@ -722,12 +721,12 @@ pred_df <- rbindlist(pred_df) %>% mutate(age_group = factor(age_group, levels = 
 pred_df %<>% mutate(pred = 30.437*(pred/typical_rate), se = 30.437*(se/typical_rate))
 
 # Save U.S. age-response predictions
-write_parquet(pred_df, sink = 'output/usa/age_response.pq')
+write_parquet(pred_df, sink = 'processed/US/age_response.pq')
 
 ## mexico response by age ----------------------------------------------------------
 
 # Read Mexico monthly deaths and population, define age groups and merge with monthly weather
-mexico_mort <- read_parquet('data/mexico/monthly_death_pop_income.pq') %>% 
+mexico_mort <- read_parquet('data/MEX/monthly_death_pop_income.pq') %>% 
   mutate(adm1 = substr(adm2, 1, 3), adm2 = as.integer(adm2)) %>% 
   mutate(
     deaths_lt1 = alt1, pop_lt1 = alt1_pop,
@@ -742,11 +741,9 @@ mexico_mort <- read_parquet('data/mexico/monthly_death_pop_income.pq') %>%
     adm1 = substr(adm2, 1, 3)
   ) %>% 
   select(adm2, adm1, year, month, deaths_lt1, pop_lt1, deaths_1_4, pop_1_4, deaths_5_44, pop_5_44, deaths_45_54, pop_45_54, deaths_55_64, pop_55_64, deaths_65_74, pop_65_74, deaths_75_84, pop_75_84, deaths_gt85, pop_gt85)
-# {https://www.dropbox.com/scl/fi/kdmxy0kyblzdpjc8rudtz/monthly_death_pop_income.pq?rlkey=487n9d7gclc1hcv65ufwkfsbl&dl=0}
 
 # Monthly Mexican weather with lag 0 metrics
-monthly_weather <- read_parquet('data/mexico/met/monthly_weather.pq') %>% select(adm2, year, month, ends_with('_l0'))
-# {https://www.dropbox.com/scl/fi/a25gcczxtx7jhu7vv1g0p/monthly_weather.pq?rlkey=5vpl3qdxu0jijzl3d6gni2dlc&dl=0}
+monthly_weather <- read_parquet('data/MEX/monthly_weather.pq') %>% select(adm2, year, month, ends_with('_l0'))
 
 # Combine monthly deaths/pop and weather
 mexico_month_panel <- merge(mexico_mort, monthly_weather, by = c('adm2','year','month'))
@@ -818,15 +815,15 @@ mex_pred_df <- rbindlist(mex_pred_df) %>% mutate(age_group = factor(age_group, l
 mex_pred_df %<>% mutate(pred = 30.437*(pred/typical_rate), se = 30.437*(se/typical_rate))
 
 # Save Mexico age-response predictions
-write_parquet(mex_pred_df, sink = 'output/mexico/age_response.pq')
+write_parquet(mex_pred_df, sink = 'processed/MEX/age_response.pq')
 
 ## full figure ---------------------------------------------------------------------
 
 # Read age- and lag-response prediction outputs for both countries
-mex_age <- read_parquet('output/mexico/age_response.pq')
-us_age <- read_parquet('output/usa/age_response.pq')
-mex_lag <- read_parquet('output/mexico/lag_response.pq')
-us_lag <- read_parquet('output/usa/lag_response.pq')
+mex_age <- read_parquet('processed/MEX/age_response.pq')
+us_age <- read_parquet('processed/MEX/age_response.pq')
+mex_lag <- read_parquet('processed/MEX/lag_response.pq')
+us_lag <- read_parquet('processed/MEX/lag_response.pq')
 
 # Stack U.S. and Mexico age-response results, filter to violence == 1 and label type
 age_plot_df <- rbind(mex_age %>% mutate(geo = 'Mexico'), us_age %>% mutate(geo = 'U.S.')) %>% 
@@ -872,4 +869,4 @@ lag_plots <- ggplot(data = lag_plot_df %>% filter((geo == 'U.S.' & temp >= 0 & t
 full_plot <- cowplot::plot_grid(age_plots, lag_plots, nrow = 2, axis  = 'tlbr',align= 'hv')
 
 # Save final figure as PDF
-ggsave(full_plot, file = 'output/figures/lag_age_response.pdf', height = 8, width = 10, units = 'in')
+ggsave(full_plot, file = 'fig/combined/lag_age_response.pdf', height = 8, width = 10, units = 'in')

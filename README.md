@@ -14,6 +14,10 @@ Code repository for "Understanding and addressing temperature impacts on mortali
   - `fixest`
   - `matrixStats` 
   - `ISOweek`
+  - `pammtools`
+  - `tictoc`
+  - `sf`
+  - `ggnewscale`
 
 **Operating System:**
 
@@ -47,9 +51,9 @@ Instructions and typical install time on a normal desktop computer.
 
 ### Replication Instructions
 
-#### Figures 1, 2, 3, S1, S2, and S9
+### Figures 1, 2, 3, S1, S2, and S9
 
-##### Step 1: Download and Organize Data
+#### Step 1: Download and Organize Data
 
 Download each country's data and place files in `data/[country_name]/cleaned`, where `country_name` is MEX, EU, or US. For each country, the data include three parquet files:
 
@@ -73,7 +77,7 @@ Download each country's data and place files in `data/[country_name]/cleaned`, w
 
 The US data are restricted use and available by application to the CDC and are not provided.
 
-##### Step 2: Generate Analysis Dataframes
+#### Step 2: Generate Analysis Dataframes
 
 Run `MortalityTemp_combined_analysis_v2.R` to generate dataframes for plotting figures in the paper. The resulting outputs including bootstrap and plot dataframes will be saved in `processed/[country_name]`.
 
@@ -97,7 +101,7 @@ The `MortalityTemp_combined_analysis_v2.R` script requires several configuration
 - Set `si_folder` = ["age_standardized"]
 - Dataframes will be saved in `processed/[country_name]/age_standardized` (age standardized rate as outcome)
 
-##### Step 3: Generate Figures
+#### Step 3: Generate Figures
 
 After completing Step 2, run `MortalityTemp_combined_plots_v2.R` to generate figures. The resulting figures will be saved in `fig/combined/`:
 
@@ -108,9 +112,11 @@ After completing Step 2, run `MortalityTemp_combined_plots_v2.R` to generate fig
 - Figure S2: `fig_2_age_std_us_mex.pdf`
 - Figure S9: `decade_fixed1970.pdf`
 
-##### Figures 4 and 5
+### Figures 4 and 5
 
-##### Step 1: Download and Organize Data
+#### Step 1: Download and Organize Data
+
+Download each country's data and place files in `data/[country_name]`, where `country_name` is MEX or US.
 
 US data: 
 
@@ -130,13 +136,13 @@ Mexico data:
 6. `monthly_weather.pq` [~2.33GB](https://www.dropbox.com/scl/fi/a25gcczxtx7jhu7vv1g0p/monthly_weather.pq?rlkey=5vpl3qdxu0jijzl3d6gni2dlc&dl=0)
 7. `full_monthly.pq` [~1.69GB](https://www.dropbox.com/scl/fi/emswcm2vhz26cpmgao44r/full_monthly.pq?rlkey=qt0jlm01yarkogb2bn5q05342&dl=0)
 
-##### Step 2: Generate Figures
+#### Step 2: Generate Figures
 
 Run the following scripts to generate figures. The resulting figures will be saved in `fig/combined/`:
 
 - For Figure 4: Run `age_lag_response_us_mexico.R` -> outputs `lag_age_response.pdf`
 - Fpr Figure 5: Run `by_cause_us_mexico.R` -> outputs `cause.pdf`
 
-#### Expected Output and Runtime
+### Expected Output and Runtime
 
 Expected output and expected run time for execution on a normal desktop computer: ...
