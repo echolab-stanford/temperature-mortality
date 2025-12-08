@@ -24,7 +24,7 @@ setwd("~/BurkeLab Dropbox/projects/temperature-mortality")
 # To replicate analysis, you can set the following parameters
 # outputs from this script will be saved in "processed" folder for respective countries
 # for combined figures, we will run different script
-country_name <- "US" # Other options: EU, MEX
+country_name <- "EU" # Other options: EU, MEX
 # if one wants to replicate supplmentary figure inputs
 # options include: log_rate, same_year, age_standardized, data_1990_2023 (only when country_name == MEX) or winsor 
 si_folder <- "winsor" 
@@ -216,9 +216,9 @@ if (si_folder == "same_year") {
 }
 
 # Main loop through models
-for (model_name in names(model_formula_list)[8:8]) { 
+for (model_name in names(model_formula_list)[1:4]) { 
 
-  # model_name <- "baseline"
+  # model_name <- "Pooled"
   message("Processing model: ", model_name)
   
   # Set analysis parameters
@@ -416,23 +416,43 @@ for (model_name in names(model_formula_list)[8:8]) {
     midpoints <- as.character(midpoints)
     
     cols <- c("adm_id", "year", time_agg_var, pop_var)
-    pwd <- merge( mort[, ..cols], temp_bins, by = c("adm_id", "year", time_agg_var) )
+    
+    # Population and degree days bin exposures
+    pwd <- merge(mort[, ..cols], temp_bins, by = c("adm_id", "year", time_agg_var))
     setnames(pwd, pop_var, "pop")
-    annual_pwd <- pwd[!is.na(pop)][, 
-                                   (midpoints) := lapply(.SD, function(x) x * pop), .SDcols = midpoints
-                                   ][, 
-                                     lapply(.SD, sum), .SDcols = midpoints, by = .(year)
-                                     ][, 
-                                       lapply(.SD, mean), .SDcols = midpoints
-                                       ]
-    annual_pwd <- melt(annual_pwd, measure.vars = midpoints, variable.name = "bins", value.name = "pop_deg_days", na.rm = TRUE)
-    annual_pwd[, bins := ceiling(as.numeric(as.character(bins)))]
-    response <- merge(response, annual_pwd, by = "bins", all.x = T)
     
-    rm(pwd, annual_pwd)
-    gc()
+    # Annual population person-day exposure
+    annual_pwd_bins <- pwd[!is.na(pop)]
+    rm(pwd)
+    gc(full = TRUE)
+    
+    annual_pwd_bins[, (midpoints) := .SD * pop, .SDcols = midpoints]
+    annual_pwd_bins <- annual_pwd_bins[, lapply(.SD, sum), .SDcols = midpoints, by = .(year)]
+    annual_pwd_bins <- melt(annual_pwd_bins, measure.vars = midpoints, variable.name = "bins", value.name = "pop_deg_days", na.rm = TRUE)
+    
+    # Get overall deaths and merge with annual person-day exposure
+    annual_pwd_bins <- merge(annual_pwd_bins, mort[, .(total_deaths = sum(get(death_var), na.rm = TRUE)), by = .(year)], by = "year")
+    annual_pwd_bins[, bins := ceiling(as.numeric(as.character(bins)))]
+    
+    # Take average annual person-day exposure and merge with response
+    response <- merge(response, annual_pwd_bins[, .(pop_deg_days = mean(pop_deg_days)), by = .(bins)], by = "bins", all.x = TRUE) 
+    
+    # --- 10. Percent of overall annual deaths in each bin
+    bstrap_long <- melt(data.table(bins = -50:50, bstrap_result), id.vars = "bins", variable.name = "iteration", value.name = "pred")
+    response_by_year_bins <- bstrap_long[annual_pwd_bins, on = "bins", allow.cartesian = TRUE][, bins_deaths := pred * pop_deg_days]
+    response_by_year_bins <- response_by_year_bins[, .(bins_deaths = mean(bins_deaths), total_deaths = mean(total_deaths)), by = .(bins)] # collapse year and iteration
+    response_by_year_bins[, `:=` (key = "pooled", model = model_name, t1 = t1_index, t99 = t99_index)]
+    
+    rm(annual_pwd_bins)
+    gc(full = TRUE)
+    
+    response_by_year_bins %>%
+      ggplot(aes(x = bins, y = bins_deaths / total_deaths)) +
+      geom_bar(stat = 'identity', position = 'stack', width = 1, alpha = 1) +
+      scale_y_continuous(
+        labels = scales::percent_format()
+      )
 
-    
     # --- 11. Hot/Cold Day Classification ---
     # Classify days as hot (>MMT) or cold (<=MMT)
     narrow_panel <- daily_temp[, side := fifelse(temp1 > mmt, "hot", "cold")]
@@ -507,6 +527,7 @@ for (model_name in names(model_formula_list)[8:8]) {
     
     # --- 15. Final Output ---
     out <- list(
+      response_by_year_bins = response_by_year_bins, # Temperature-mort response by year and bins
       response = response,  # Temperature-mortality curve
       deaths = deaths,       # Hot/cold death estimates
       deaths_by_year_side = deaths_by_year_side # Annual hot/cold death estimates

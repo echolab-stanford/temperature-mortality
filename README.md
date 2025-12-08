@@ -112,7 +112,7 @@ After completing Step 2, run `MortalityTemp_combined_plots_v2.R` to generate fig
 - Figure S2: `fig_2_age_std_us_mex.pdf`
 - Figure S9: `decade_fixed1970.pdf`
 
-### Figures 4 and 5
+### Figures 4, 5, and 6
 
 #### Step 1: Download and Organize Data
 
@@ -125,6 +125,7 @@ US data:
 3. `us_temp.pq` [~1.96GB](https://www.dropbox.com/scl/fi/4zjz4gos7sd8bbul1mw2y/us_temp.pq?rlkey=k2xv5hzwa6xslnmcyfgnnw0wn&dl=0)
 4. `us_precip.pq` [~823.33MB](https://www.dropbox.com/scl/fi/ppmm5er5k86c1l7mq14tt/us_precip.pq?rlkey=3wndfp4w202mksbjlousik3c5&dl=0)
 5. `fully_monthly.pq` - data is not public so cannot be shared for replication
+6. `CONUS_consistent_counties` [~15.98MB](https://www.dropbox.com/scl/fi/ls3dqkf8xfpxqjbvp4ksc/CONUS_consistent_counties.gpkg?rlkey=7oftm4mxve65vqe5jlrxok1aj&dl=0)
 
 Mexico data:
 
@@ -135,13 +136,24 @@ Mexico data:
 5. `monthly_death_pop_income.pq` [~302.46MB](https://www.dropbox.com/scl/fi/kdmxy0kyblzdpjc8rudtz/monthly_death_pop_income.pq?rlkey=487n9d7gclc1hcv65ufwkfsbl&dl=0)
 6. `monthly_weather.pq` [~2.33GB](https://www.dropbox.com/scl/fi/a25gcczxtx7jhu7vv1g0p/monthly_weather.pq?rlkey=5vpl3qdxu0jijzl3d6gni2dlc&dl=0)
 7. `full_monthly.pq` [~1.69GB](https://www.dropbox.com/scl/fi/emswcm2vhz26cpmgao44r/full_monthly.pq?rlkey=qt0jlm01yarkogb2bn5q05342&dl=0)
+8. `harmonized_1990.shp` [~6.84MB](https://www.dropbox.com/scl/fi/ksbdkrjd76ayhqw3o64ov/mexico.gpkg?rlkey=3xq7rnbl6c1g5vfa78zwgvw2i&dl=0)
+
+Europe data: 
+
+1. `full_weekly.pq` [~146.MB](https://www.dropbox.com/scl/fi/txd2ajouz26hjo4u2x7yt/full_weekly.pq?rlkey=kre5ziioq7c9g5uw38yo2kubm&dl=0)
+2. `eu_nuts3_2024.gpkg` [~29.46MB](https://www.dropbox.com/scl/fi/kr61s2lurcsia3jmldjo7/eu_nuts3_2024.gpkg?rlkey=au9iwm8gj0av6xvx4qdeevf4k&dl=0)
+
+World map:
+
+1. `geoBoundariesCGAZ_ADM0` [~154.63](https://www.dropbox.com/scl/fi/8geqx7i7q4m90snvdgmsh/geoBoundariesCGAZ_ADM0.gpkg?rlkey=81mz0k6nbnhbp1o0uhb8xtdhj&dl=0)
 
 #### Step 2: Generate Figures
 
 Run the following scripts to generate figures. The resulting figures will be saved in `fig/combined/`:
 
 - For Figure 4: Run `age_lag_response_us_mexico.R` -> outputs `lag_age_response.pdf`
-- Fpr Figure 5: Run `by_cause_us_mexico.R` -> outputs `cause.pdf`
+- For Figure 5: Run `by_cause_us_mexico.R` -> outputs `cause.pdf`
+- For Figure 6: Run `us_mex_eu_maps.R` -> outputs `maps/...`
 
 ### Expected Output and Runtime
 

@@ -4,7 +4,9 @@
 pacman::p_load(fastverse, tidyverse, arrow, fixest)
 
 # Set working directory
-setwd('/Users/aw/Dropbox/Research/temp_mortality')
+# setwd("~/path/to/temperature-mortality")
+# setwd('/Users/aw/Dropbox/Research/temp_mortality')
+setwd("~/BurkeLab Dropbox/projects/temperature-mortality")
 
 # Set seed for reproducibility
 set.seed(42)

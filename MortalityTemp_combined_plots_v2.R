@@ -678,108 +678,108 @@ ggsave(plot = fig_2, filename = fig_2_dir, width = 12, height = 12, units = "in"
 # MAIN FIGURE 3
 # ###################################################################################
 
-# plot_deaths_at_bins <- function(){
-#   country_names <- list("US", "EU", "MEX")
-#   
-#   df_list <- lapply(country_names, function(country_name){
-#     # country_name <- "US"
-#     processed_country_dir <- paste("processed", country_name, sep = "/")
-#     processed_files <- list.files(processed_country_dir)
-#     group_denominator <- T
-#     
-#     # bring in deaths by bins
-#     death_by_bins_files <- processed_files[grepl("deaths_by_bins", processed_files) &
-#                                              (grepl("young", processed_files) |
-#                                                 grepl("adult", processed_files) |
-#                                                 grepl("elderly", processed_files) |
-#                                                 grepl("pooled", processed_files))]
-#     
-#     death_by_bins <- lapply(death_by_bins_files, function(file){readRDS(file.path(processed_country_dir, file))})
-#     death_by_bins <- do.call(rbind, death_by_bins)
-#     
-#     # total deaths
-#     total_deaths_files <- processed_files[(grepl("deaths_by_side_year", processed_files) & !grepl(pattern = "iteration", x = processed_files)) &
-#                                             (grepl("young", processed_files) |
-#                                                grepl("adult", processed_files) |
-#                                                grepl("elderly", processed_files) |
-#                                                grepl("pooled", processed_files))]
-#     total_deaths <- lapply(total_deaths_files, function(file){readRDS(file.path(processed_country_dir, file))})
-#     total_deaths <- do.call(rbind, total_deaths)
-#     total_deaths <- distinct(total_deaths[, .(year, annual_total_death, model_name)])
-#     
-#     df <- merge(death_by_bins, total_deaths, by = c("year", "model_name"), all.x = T)
-#     
-#     if (group_denominator) {
-#       df <- df %>%
-#         filter(deaths != 0 & deaths > 0) %>%
-#         mutate(deaths = deaths / annual_total_death) %>%
-#         group_by(bins, model_name) %>%
-#         summarise(deaths = mean(deaths, na.rm = TRUE), .groups = "drop") %>%
-#         ungroup()
-#     } else { # denominator is overall total deaths
-#       df <- df %>% group_by(year, bins) %>% mutate(annual_total_death = sum(annual_total_death, na.rm = T)) %>% ungroup() %>%
-#         filter(deaths != 0 & deaths > 0) %>%
-#         mutate(deaths = deaths / annual_total_death) %>%
-#         group_by(bins, model_name) %>%
-#         summarise(deaths = mean(deaths, na.rm = TRUE), .groups = "drop") %>%
-#         ungroup()
-#     }
-#     
-#     df$country_name <- country_name
-#     return(df)
-#   })
-#   df <- do.call(rbind, df_list)
-#   
-#   df <- df %>%
-#     group_by(model_name, country_name) %>%
-#     mutate(deaths = ifelse(bins < -20, sum(deaths[bins < -20]), deaths)) %>%
-#     filter(bins > -21) %>%
-#     ungroup()
-#   
-#   theme_clean <- function(){
-#     theme_classic() +
-#       theme(axis.text=element_text(size=10),axis.title=element_text(size=10),
-#             axis.title.y=element_text(margin=margin(t=0,r=10,b=0,l=0)),
-#             axis.title.x=element_text(margin=margin(t=10,r=0,b=0,l=0)),
-#             plot.title=element_text(color="black",size=12,hjust=0.5,face="bold"),
-#             axis.line = element_line(color = 'black',linewidth  = 0.35),
-#             axis.ticks = element_line(colour = "black",linewidth = 0.35),
-#             axis.text.x=element_text(color="black"),
-#             axis.text.y=element_text(color="black"))
-#   }
-#   
-#   color_palette <- c('#0072B2', '#CC79A7','#009E73', '#F0E442')
-#   # color_palette <- rev(met.brewer("Tam", 3))
-#   
-#   plot <- df %>%
-#     mutate(model_name = factor(model_name, levels = c("Pooled","Elderly", "Adult", "Young"))) %>%
-#     arrange(model_name, country_name) %>%
-#     mutate(country_name = factor(country_name, levels = c("US", "EU", "MEX"))) %>%
-#     ggplot(aes(x = bins, y = deaths, fill = model_name)) +
-#     geom_bar(stat = 'identity', position = 'stack', width = 1, alpha = 1) +
-#     scale_y_continuous(
-#       labels = scales::percent_format()
-#     ) +
-#     scale_fill_manual(values = color_palette, name = '') +
-#     theme_minimal() +
-#     xlab("Temperature (°C)") +
-#     ylab('Percent of total annual deaths') +
-#     facet_grid(rows = vars(model_name), cols = vars(country_name), scales = "free_y") +
-#     theme(
-#       strip.text.x = element_text(size = 10, face = "bold"),
-#       strip.text.y = element_blank(),
-#       panel.grid.major.x = element_line(color = "gray80", linetype = "dotted", linewidth = 0.5),
-#       panel.grid.minor.x = element_blank(),
-#       panel.grid.major.y = element_line(color = "gray90", linetype = "solid", linewidth = 0.5),
-#       panel.grid.minor.y = element_blank(),
-#       panel.spacing = unit(1.5, "lines")
-#     )
-#   
-#   return(plot)
-# }
-# fig_3 <- plot_deaths_at_bins()
-# fig_3_dir <- file.path("fig/combined", paste0("fig_3.pdf"))
-# ggsave(plot = fig_3, filename = fig_3_dir, width = 10, height = 6, units = "in", dpi = 300)
+plot_deaths_at_bins <- function(){
+  country_names <- list("US", "EU", "MEX")
+
+  df_list <- lapply(country_names, function(country_name){
+    # country_name <- "US"
+    processed_country_dir <- paste("processed", country_name, sep = "/")
+    processed_files <- list.files(processed_country_dir)
+    group_denominator <- T
+
+    # bring in deaths by bins
+    death_by_bins_files <- processed_files[grepl("deaths_by_bins", processed_files) &
+                                             (grepl("young", processed_files) |
+                                                grepl("adult", processed_files) |
+                                                grepl("elderly", processed_files) |
+                                                grepl("pooled", processed_files))]
+
+    death_by_bins <- lapply(death_by_bins_files, function(file){readRDS(file.path(processed_country_dir, file))})
+    death_by_bins <- do.call(rbind, death_by_bins)
+
+    # total deaths
+    total_deaths_files <- processed_files[(grepl("deaths_by_side_year", processed_files) & !grepl(pattern = "iteration", x = processed_files)) &
+                                            (grepl("young", processed_files) |
+                                               grepl("adult", processed_files) |
+                                               grepl("elderly", processed_files) |
+                                               grepl("pooled", processed_files))]
+    total_deaths <- lapply(total_deaths_files, function(file){readRDS(file.path(processed_country_dir, file))})
+    total_deaths <- do.call(rbind, total_deaths)
+    total_deaths <- distinct(total_deaths[, .(year, annual_total_death, model_name)])
+
+    df <- merge(death_by_bins, total_deaths, by = c("year", "model_name"), all.x = T)
+
+    if (group_denominator) {
+      df <- df %>%
+        filter(deaths != 0 & deaths > 0) %>%
+        mutate(deaths = deaths / annual_total_death) %>%
+        group_by(bins, model_name) %>%
+        summarise(deaths = mean(deaths, na.rm = TRUE), .groups = "drop") %>%
+        ungroup()
+    } else { # denominator is overall total deaths
+      df <- df %>% group_by(year, bins) %>% mutate(annual_total_death = sum(annual_total_death, na.rm = T)) %>% ungroup() %>%
+        filter(deaths != 0 & deaths > 0) %>%
+        mutate(deaths = deaths / annual_total_death) %>%
+        group_by(bins, model_name) %>%
+        summarise(deaths = mean(deaths, na.rm = TRUE), .groups = "drop") %>%
+        ungroup()
+    }
+
+    df$country_name <- country_name
+    return(df)
+  })
+  df <- do.call(rbind, df_list)
+
+  df <- df %>%
+    group_by(model_name, country_name) %>%
+    mutate(deaths = ifelse(bins < -20, sum(deaths[bins < -20]), deaths)) %>%
+    filter(bins > -21) %>%
+    ungroup()
+
+  theme_clean <- function(){
+    theme_classic() +
+      theme(axis.text=element_text(size=10),axis.title=element_text(size=10),
+            axis.title.y=element_text(margin=margin(t=0,r=10,b=0,l=0)),
+            axis.title.x=element_text(margin=margin(t=10,r=0,b=0,l=0)),
+            plot.title=element_text(color="black",size=12,hjust=0.5,face="bold"),
+            axis.line = element_line(color = 'black',linewidth  = 0.35),
+            axis.ticks = element_line(colour = "black",linewidth = 0.35),
+            axis.text.x=element_text(color="black"),
+            axis.text.y=element_text(color="black"))
+  }
+
+  color_palette <- c('#0072B2', '#CC79A7','#009E73', '#F0E442')
+  # color_palette <- rev(met.brewer("Tam", 3))
+
+  plot <- df %>%
+    mutate(model_name = factor(model_name, levels = c("Pooled","Elderly", "Adult", "Young"))) %>%
+    arrange(model_name, country_name) %>%
+    mutate(country_name = factor(country_name, levels = c("US", "EU", "MEX"))) %>%
+    ggplot(aes(x = bins, y = deaths, fill = model_name)) +
+    geom_bar(stat = 'identity', position = 'stack', width = 1, alpha = 1) +
+    scale_y_continuous(
+      labels = scales::percent_format()
+    ) +
+    scale_fill_manual(values = color_palette, name = '') +
+    theme_minimal() +
+    xlab("Temperature (°C)") +
+    ylab('Percent of total annual deaths') +
+    facet_grid(rows = vars(model_name), cols = vars(country_name), scales = "free_y") +
+    theme(
+      strip.text.x = element_text(size = 10, face = "bold"),
+      strip.text.y = element_blank(),
+      panel.grid.major.x = element_line(color = "gray80", linetype = "dotted", linewidth = 0.5),
+      panel.grid.minor.x = element_blank(),
+      panel.grid.major.y = element_line(color = "gray90", linetype = "solid", linewidth = 0.5),
+      panel.grid.minor.y = element_blank(),
+      panel.spacing = unit(1.5, "lines")
+    )
+
+  return(plot)
+}
+fig_3 <- plot_deaths_at_bins()
+fig_3_dir <- file.path("fig/combined", paste0("fig_3.pdf"))
+ggsave(plot = fig_3, filename = fig_3_dir, width = 10, height = 6, units = "in", dpi = 300)
 
 ############################################################################
 # SUPPLEMENTARY FIGIRE S1: LOG RATE
