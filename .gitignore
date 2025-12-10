@@ -6,3 +6,5 @@
 *.shp
 *.gpkg
 *.csv
+*.Rhistory
+*.png

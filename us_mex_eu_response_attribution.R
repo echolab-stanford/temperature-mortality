@@ -17,14 +17,14 @@ setFixest_nthreads(6, save = TRUE)
 # DIRECTORY AND PATH SETUP
 ################################################################################
 
-# setwd("~/path/to/temperature-mortality")
-setwd("~/BurkeLab Dropbox/projects/temperature-mortality")
+setwd("~/path/to/temperature-mortality")
+# setwd("~/BurkeLab Dropbox/projects/temperature-mortality")
 
 # Define main parameters
 # To replicate analysis, you can set the following parameters
 # outputs from this script will be saved in "processed" folder for respective countries
 # for combined figures, we will run different script
-country_name <- "EU" # Other options: EU, MEX
+country_name <- "US" # Other options: EU, MEX
 # if one wants to replicate supplmentary figure inputs
 # options include: log_rate, same_year, age_standardized, data_1990_2023 (only when country_name == MEX) or winsor 
 si_folder <- "winsor" 
@@ -315,7 +315,7 @@ for (model_name in names(model_formula_list)[1:4]) {
     # POOLED ANALYSIS SETUP
     ########################################################################
     
-    # --- 0. Population-Specific Variables ---
+    # 0. Population-Specific Variables
     # Assign population and death columns based on model_name
     if (model_name == "Young") {
       pop_var <- "pop_young"
@@ -341,11 +341,11 @@ for (model_name in names(model_formula_list)[1:4]) {
       time_agg_var <- "month"
     }
     
-    # --- 1. Model Coefficient Processing ---
+    # 1. Model Coefficient Processing
     # Transpose coefficient matrix for downstream operations
     coefs_before_sum <- t(as.matrix(coefs))  # coefs: Original regression coefficients
     
-    # --- 2. Cumulative Lag Effects Calculation ---
+    # 2. Cumulative Lag Effects Calculation
     # Sum coefficients for each polynomial term (temp_d1 to temp_d4), excluding precipitation terms
     poly_groups <- c("temp_d1", "temp_d2", "temp_d3", "temp_d4")
     coefs_sum <- sapply(poly_groups, function(poly) {
@@ -356,11 +356,11 @@ for (model_name in names(model_formula_list)[1:4]) {
     
     coefs_sum <- t(as.matrix(coefs_sum))  # Transpose back to original orientation
     
-    # --- 3. Temperature Response Curve ---
+    # 3. Temperature Response
     # Predict mortality response using polynomial-transformed temperatures
     pred_vector <- pred_temps_poly %*% t(coefs_sum)  # pred_temps_poly: Temp values transformed via polynomial basis
     
-    # --- 4. Temperature Range Trimming ---
+    # 4. Temperature Range Trimming
     # Restrict predictions to 1%-99% percentile of observed temperatures to exclude extremes
     observed_temps <- daily_temp$temp1  # Observed temperature data
     t1_index <- collapse::fquantile(observed_temps, 0.01, na.rm = TRUE)  # 1st percentile
@@ -368,7 +368,7 @@ for (model_name in names(model_formula_list)[1:4]) {
     mmt_options <- which(pred_temp_range > t1_index & pred_temp_range < t99_index)  # Indices within range
     new_temp_range <- pred_temp_range[mmt_options]  # Subset temperature range
     
-    # --- 5. Minimum Mortality Temperature (MMT) ---
+    # 5. Minimum Mortality Temperature (MMT)
     # Find temperature with lowest predicted mortality (MMT)
     mmt <- new_temp_range[which.min(pred_vector[mmt_options])]
     mmt_matrix <- poly(mmt, degree = 4, raw = T)  # Create polynomial terms for MMT
@@ -376,13 +376,13 @@ for (model_name in names(model_formula_list)[1:4]) {
     
     pred_vector <- pred_temps_scaled %*% t(coefs_sum)
     
-    # --- 6. Bootstrap Coefficient Processing ---
+    # 6. Bootstrap Coefficient Processing
     # Extract temperature-related coefficients from bootstrap results
     temp_cols <- names(bstrap)[grep("temp", names(bstrap))]  # Columns with "temp" in name
     bst_coefs_before_sum <- bstrap[, ..temp_cols]  # Subset bootstrap coefficients
     bst_coefs_before_sum <- as.matrix(bst_coefs_before_sum)  # Convert to matrix
     
-    # --- 7. Bootstrap Response Calculation ---
+    # 7. Bootstrap Response Calculation
     # Sum bootstrap coefficients by polynomial group (same as step 2 but for bootstrapped coefs)
     bst_coefs_sum <- sapply(poly_groups, function(poly) {
       poly_names = colnames(bst_coefs_before_sum)[grepl(poly, colnames(bst_coefs_before_sum)) & !grepl("prec", colnames(bst_coefs_before_sum))]
@@ -398,7 +398,7 @@ for (model_name in names(model_formula_list)[1:4]) {
       mean = matrixStats::rowMeans2(bstrap_result, na.rm = TRUE)
     )
     
-    # --- 8. Response Result ---
+    # 8. Response Result 
     response <- data.table(
       pred_q025 = response_stats[, 1],  # 2.5% quantile
       pred = response_stats[, 4],       # Mean response
@@ -411,7 +411,7 @@ for (model_name in names(model_formula_list)[1:4]) {
       t99 = t99_index                   # 99th percentile temp
     )]
     
-    # --- 9. Add annual average person days exposure
+    # 9. Add annual average person days exposure
     midpoints <- (pred_temp_range[-1] + pred_temp_range[-length(pred_temp_range)]) / 2
     midpoints <- as.character(midpoints)
     
@@ -437,7 +437,7 @@ for (model_name in names(model_formula_list)[1:4]) {
     # Take average annual person-day exposure and merge with response
     response <- merge(response, annual_pwd_bins[, .(pop_deg_days = mean(pop_deg_days)), by = .(bins)], by = "bins", all.x = TRUE) 
     
-    # --- 10. Percent of overall annual deaths in each bin
+    #   10. Percent of overall annual deaths in each bin
     bstrap_long <- melt(data.table(bins = -50:50, bstrap_result), id.vars = "bins", variable.name = "iteration", value.name = "pred")
     response_by_year_bins <- bstrap_long[annual_pwd_bins, on = "bins", allow.cartesian = TRUE][, bins_deaths := pred * pop_deg_days]
     response_by_year_bins <- response_by_year_bins[, .(bins_deaths = mean(bins_deaths), total_deaths = mean(total_deaths)), by = .(bins)] # collapse year and iteration
@@ -453,11 +453,11 @@ for (model_name in names(model_formula_list)[1:4]) {
         labels = scales::percent_format()
       )
 
-    # --- 11. Hot/Cold Day Classification ---
+    # 11. Hot/Cold Day Classification
     # Classify days as hot (>MMT) or cold (<=MMT)
     narrow_panel <- daily_temp[, side := fifelse(temp1 > mmt, "hot", "cold")]
     
-    # --- 12. Prepare aggregated panel ---
+    # 12. Prepare aggregated panel
     narrow_panel <- narrow_panel[!is.na(side), .(
       temp1 = sum(temp1), 
       temp2 = sum(temp2), 
@@ -466,16 +466,16 @@ for (model_name in names(model_formula_list)[1:4]) {
       ndays = .N
     ), by = c("adm_id", "year", time_agg_var, "side")]
     
-    # --- 12. Merge Population/Death Data ---
+    #   12. Merge Population/Death Data  
     narrow_panel <- merge(narrow_panel, mort %>% select(adm_id, year, all_of(time_agg_var), pop = all_of(pop_var), n_deaths = all_of(death_var)), by = c("adm_id", "year", time_agg_var))
     
-    # --- 13. Death Prediction via Bootstrap ---
+    #   13. Death Prediction via Bootstrap  
     temp_cols <- paste0("temp", 1:4)
     pred_mat <- as.matrix(narrow_panel[, ..temp_cols])
     pred_mat <- pred_mat - matrix(narrow_panel$ndays %o% t(mmt_matrix), ncol = 4)  # Scale by days
     bstrap_deaths <- pred_mat %*% t(bst_coefs_sum)
     
-    # --- 14. Number of estimated deaths --- 
+    #   14. Number of estimated deaths   
     if (log_rate == TRUE) {
       # transform back to level
       typical_rate <- mean(mort %>% group_by(get(time_agg_var)) %>% pull(outcome_var), na.rm = TRUE)
@@ -525,7 +525,7 @@ for (model_name in names(model_formula_list)[1:4]) {
       deaths_q975 = mean(deaths_q975, na.rm = TRUE)
     ), by = .(side)][, key := "pooled"][, model := model_name] 
     
-    # --- 15. Final Output ---
+    #   15. Final Output  
     out <- list(
       response_by_year_bins = response_by_year_bins, # Temperature-mort response by year and bins
       response = response,  # Temperature-mortality curve
@@ -663,7 +663,7 @@ for (model_name in names(model_formula_list)[1:4]) {
         t99 = t99_index
       )]
       
-      # --- 9. Add annual average person days exposure
+      #   9. Add annual average person days exposure
       midpoints <- (pred_temp_range[-1] + pred_temp_range[-length(pred_temp_range)]) / 2
       midpoints <- as.character(midpoints)
       
@@ -685,7 +685,7 @@ for (model_name in names(model_formula_list)[1:4]) {
       # create side indicator in relation to mmt
       current_narrow_panel[, side := fifelse(temp1 > mmt, "hot", "cold")]
       
-      # --- 12. Prepare aggregated panel ---
+      #   12. Prepare aggregated panel  
       current_narrow_panel <- current_narrow_panel[!is.na(side), .(
         temp1 = sum(temp1), 
         temp2 = sum(temp2), 
@@ -694,16 +694,16 @@ for (model_name in names(model_formula_list)[1:4]) {
         ndays = .N
       ), by = c("adm_id", "year", time_agg_var, "side")]
       
-      # --- 12. Merge Population/Death Data ---
+      #   12. Merge Population/Death Data  
       current_narrow_panel <- merge(current_narrow_panel, adm_year_pop_death, by = c("adm_id", "year", time_agg_var))
       
-      # --- 13. Death Prediction via Bootstrap ---
+      #   13. Death Prediction via Bootstrap  
       temp_cols <- paste0("temp", 1:4)
       pred_mat <- as.matrix(current_narrow_panel[, ..temp_cols])
       pred_mat <- pred_mat - matrix(current_narrow_panel$ndays %o% t(mmt_matrix), ncol = 4)  # Scale by days
       bstrap_deaths <- pred_mat %*% t(bst_coefs_sum)
       
-      # --- 14. Number of estimated deaths --- 
+      #   14. Number of estimated deaths   
       if (log_rate == TRUE) {
         # transform back to level
         typical_rate <- mean(current_mort %>% pull(outcome_var), na.rm = TRUE)
@@ -835,7 +835,7 @@ for (model_name in names(model_formula_list)[1:4]) {
           t99 = t99_index
         )]
         
-        # --- 9. Add annual average person days exposure
+        #   9. Add annual average person days exposure
         midpoints <- (pred_temp_range[-1] + pred_temp_range[-length(pred_temp_range)]) / 2
         midpoints <- as.character(midpoints)
         cols <- c("adm_id", "year", time_agg_var, pop_var)
@@ -856,7 +856,7 @@ for (model_name in names(model_formula_list)[1:4]) {
         # create side indicator in relation to mmt
         current_narrow_panel[, side := fifelse(temp1 > mmt, "hot", "cold")]
         
-        # --- 12. Prepare aggregated panel ---
+        #   12. Prepare aggregated panel  
         current_narrow_panel <- current_narrow_panel[!is.na(side), .(
           temp1 = sum(temp1), 
           temp2 = sum(temp2), 
@@ -865,16 +865,16 @@ for (model_name in names(model_formula_list)[1:4]) {
           ndays = .N
         ), by = c("adm_id", "year", time_agg_var, "side")]
         
-        # --- 12. Merge Population/Death Data ---
+        #   12. Merge Population/Death Data  
         current_narrow_panel <- merge(current_narrow_panel, adm_year_pop_death, by = c("adm_id", "year", time_agg_var))
         
-        # --- 13. Death Prediction via Bootstrap ---
+        #   13. Death Prediction via Bootstrap  
         temp_cols <- paste0("temp", 1:4)
         pred_mat <- as.matrix(current_narrow_panel[, ..temp_cols])
         pred_mat <- pred_mat - matrix(current_narrow_panel$ndays %o% t(mmt_matrix), ncol = 4)  # Scale by days
         bstrap_deaths <- pred_mat %*% t(bst_coefs_sum)
         
-        # --- 14. Number of estimated deaths --- 
+        #   14. Number of estimated deaths   
         if (log_rate == TRUE) {
           # transform back to level
           typical_rate <- mean(current_mort %>% pull(outcome_var), na.rm = TRUE)
@@ -1001,7 +1001,7 @@ for (model_name in names(model_formula_list)[1:4]) {
             t99 = t99_index
           )]
           
-          # --- 9. Add annual average person days exposure
+          #   9. Add annual average person days exposure
           midpoints <- (pred_temp_range[-1] + pred_temp_range[-length(pred_temp_range)]) / 2
           midpoints <- as.character(midpoints)
           cols <- c("adm_id", "year", time_agg_var, pop_var)
@@ -1022,7 +1022,7 @@ for (model_name in names(model_formula_list)[1:4]) {
           # create side indicator in relation to mmt
           current_narrow_panel[, side := fifelse(temp1 > mmt, "hot", "cold")]
           
-          # --- 12. Prepare aggregated panel ---
+          #   12. Prepare aggregated panel  
           current_narrow_panel <- current_narrow_panel[!is.na(side), .(
             temp1 = sum(temp1), 
             temp2 = sum(temp2), 
@@ -1031,16 +1031,16 @@ for (model_name in names(model_formula_list)[1:4]) {
             ndays = .N
           ), by = c("adm_id", "year", time_agg_var, "side")]
           
-          # --- 12. Merge Population/Death Data ---
+          #   12. Merge Population/Death Data  
           current_narrow_panel <- merge(current_narrow_panel, adm_year_pop_death, by = c("adm_id", "year", time_agg_var))
           
-          # --- 13. Death Prediction via Bootstrap ---
+          #   13. Death Prediction via Bootstrap  
           temp_cols <- paste0("temp", 1:4)
           pred_mat <- as.matrix(current_narrow_panel[, ..temp_cols])
           pred_mat <- pred_mat - matrix(current_narrow_panel$ndays %o% t(mmt_matrix), ncol = 4)  # Scale by days
           bstrap_deaths <- pred_mat %*% t(bst_coefs_sum)
           
-          # --- 14. Number of estimated deaths --- 
+          #   14. Number of estimated deaths   
           if (log_rate == TRUE) {
             # transform back to level
             typical_rate <- mean(current_mort %>% pull(outcome_var), na.rm = TRUE)

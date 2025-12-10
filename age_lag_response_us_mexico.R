@@ -5,9 +5,7 @@
 pacman::p_load(fastverse, tidyverse, arrow, pammtools, fixest, tictoc, sf, ggnewscale)
 
 # Set working directory
-# setwd("~/path/to/temperature-mortality")
-# setwd('/Users/aw/Dropbox/Research/temp_mortality')
-setwd("~/BurkeLab Dropbox/projects/temperature-mortality")
+setwd("~/path/to/temperature-mortality")
 
 # Set seed for reproducibility
 set.seed(42)
@@ -821,9 +819,9 @@ write_parquet(mex_pred_df, sink = 'processed/MEX/age_response.pq')
 
 # Read age- and lag-response prediction outputs for both countries
 mex_age <- read_parquet('processed/MEX/age_response.pq')
-us_age <- read_parquet('processed/MEX/age_response.pq')
+us_age <- read_parquet('processed/US/age_response.pq')
 mex_lag <- read_parquet('processed/MEX/lag_response.pq')
-us_lag <- read_parquet('processed/MEX/lag_response.pq')
+us_lag <- read_parquet('processed/US/lag_response.pq')
 
 # Stack U.S. and Mexico age-response results, filter to violence == 1 and label type
 age_plot_df <- rbind(mex_age %>% mutate(geo = 'Mexico'), us_age %>% mutate(geo = 'U.S.')) %>% 

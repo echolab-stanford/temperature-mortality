@@ -4,9 +4,7 @@
 pacman::p_load(fastverse, tidyverse, arrow, fixest)
 
 # Set working directory
-# setwd("~/path/to/temperature-mortality")
-# setwd('/Users/aw/Dropbox/Research/temp_mortality')
-setwd("~/BurkeLab Dropbox/projects/temperature-mortality")
+setwd("~/path/to/temperature-mortality")
 
 # Set seed for reproducibility
 set.seed(42)
@@ -275,4 +273,4 @@ cause_multiples <- ggplot(
 cause_multiples
 
 # Save plot
-ggsave(cause_multiples, file = 'fig/cause.pdf', height = 6, width = 10, units = 'in')
+ggsave(cause_multiples, file = 'fig/combined/cause.pdf', height = 6, width = 10, units = 'in')

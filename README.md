@@ -1,6 +1,6 @@
 # temperature-mortality
 
-Code repository for "Understanding and addressing temperature impacts on mortality". This repo contains main scripts to replicate main statistical results (Figure 1, 2, 3, S1, S2, and S9) in the paper. The underlying EU and Mexico mortality data are public and provided below with merged temperature data; the US data are restricted use and available by application to the CDC and are not provided. This project is licensed under the terms of the MIT license.
+Code repository for "Understanding and addressing temperature impacts on mortality". This repo contains main scripts to replicate main statistical results (Figures 1-6) in the paper. The underlying EU and Mexico mortality data are public and provided below with merged temperature data; the US data are restricted use and available by application to the CDC and are not provided. This project is licensed under the terms of the MIT license. 
 
 ### System Requirements
 
@@ -51,7 +51,7 @@ Instructions and typical install time on a normal desktop computer.
 
 ### Replication Instructions
 
-### Figures 1, 2, 3, S1, S2, and S9
+### Figures 1, 2, and 3
 
 #### Step 1: Download and Organize Data
 
@@ -75,31 +75,24 @@ Download each country's data and place files in `data/[country_name]/cleaned`, w
 
 **US Data:**
 
-The US data are restricted use and available by application to the CDC and are not provided.
+1. `USFullPanel_complete.pq` - The US data are restricted use and available by application to the CDC and are not provided.
+2. `USDaily_temp_covariates.pq` [~1.77GB](https://www.dropbox.com/scl/fi/ww8h0u2yuv4gb6oq1kyfl/USDaily_temp_covariates.pq?rlkey=vc8izr0i7jjmh5ywo19tz6t2x&e=1&dl=0)
+3. `USTempBins_monthly_complete.pq` [~27.03MB](https://www.dropbox.com/scl/fi/q5qaridb8zpea11ki861y/USTempBins_monthly_complete.pq?rlkey=om98hd2j117u8ckbrjybd88u5&dl=0)
+
+
 
 #### Step 2: Generate Analysis Dataframes
 
-Run `MortalityTemp_combined_analysis_v2.R` to generate dataframes for plotting figures in the paper. The resulting outputs including bootstrap and plot dataframes will be saved in `processed/[country_name]`.
+Run `us_mex_eu_response_attribution.R` to generate dataframes for plotting figures. The resulting outputs including bootstrap and plot dataframes will be saved in `processed/[country_name]`.
 
-The `MortalityTemp_combined_analysis_v2.R` script requires several configurations. After each configuration change, the script needs to be run again:
+The `us_mex_eu_response_attribution_plots.R` script requires several configurations. After each configuration change, the script needs to be run again:
 
-**For Figure 1, Figure 2, Figure 3, Figure S9:**
+**For Figure 1, 2, and 3:**
 
 - Set `country_name` = ["US", "EU", or "MEX"]
 - Set `si_folder` = ["winsor"]
 - Dataframes will be saved in `processed/[country_name]`
 
-**For Figure S1:**
-
-- Set `country_name` = ["US", "EU", or "MEX"]
-- Set `si_folder` = ["log_rate"]
-- Dataframes will be saved in `processed/[country_name]/log_rate` (log mortality rate as outcome)
-
-**For Figure S2:**
-
-- Set `country_name` = ["US", "EU", or "MEX"]
-- Set `si_folder` = ["age_standardized"]
-- Dataframes will be saved in `processed/[country_name]/age_standardized` (age standardized rate as outcome)
 
 #### Step 3: Generate Figures
 
@@ -108,9 +101,6 @@ After completing Step 2, run `MortalityTemp_combined_plots_v2.R` to generate fig
 - Figure 1: `fig_1.pdf`
 - Figure 2: `fig_2.pdf`
 - Figure 3: `fig_3.pdf`
-- Figure S1: `fig_2_log_rate.pdf`
-- Figure S2: `fig_2_age_std_us_mex.pdf`
-- Figure S9: `decade_fixed1970.pdf`
 
 ### Figures 4, 5, and 6
 
@@ -136,12 +126,15 @@ Mexico data:
 5. `monthly_death_pop_income.pq` [~302.46MB](https://www.dropbox.com/scl/fi/kdmxy0kyblzdpjc8rudtz/monthly_death_pop_income.pq?rlkey=487n9d7gclc1hcv65ufwkfsbl&dl=0)
 6. `monthly_weather.pq` [~2.33GB](https://www.dropbox.com/scl/fi/a25gcczxtx7jhu7vv1g0p/monthly_weather.pq?rlkey=5vpl3qdxu0jijzl3d6gni2dlc&dl=0)
 7. `full_monthly.pq` [~1.69GB](https://www.dropbox.com/scl/fi/emswcm2vhz26cpmgao44r/full_monthly.pq?rlkey=qt0jlm01yarkogb2bn5q05342&dl=0)
-8. `harmonized_1990.shp` [~6.84MB](https://www.dropbox.com/scl/fi/ksbdkrjd76ayhqw3o64ov/mexico.gpkg?rlkey=3xq7rnbl6c1g5vfa78zwgvw2i&dl=0)
+8. `full_monthly_small.pq` [~54.42MB](https://www.dropbox.com/scl/fi/siwphhybw5ubuttfw7r9e/full_monthly_small.pq?rlkey=tlbdwnf0yfwlu211ubfd6nlo0&dl=0)
+9. `mexico.gpkg` [~6.84MB](https://www.dropbox.com/scl/fi/ksbdkrjd76ayhqw3o64ov/mexico.gpkg?rlkey=3xq7rnbl6c1g5vfa78zwgvw2i&dl=0)
 
 Europe data: 
 
 1. `full_weekly.pq` [~146.MB](https://www.dropbox.com/scl/fi/txd2ajouz26hjo4u2x7yt/full_weekly.pq?rlkey=kre5ziioq7c9g5uw38yo2kubm&dl=0)
 2. `eu_nuts3_2024.gpkg` [~29.46MB](https://www.dropbox.com/scl/fi/kr61s2lurcsia3jmldjo7/eu_nuts3_2024.gpkg?rlkey=au9iwm8gj0av6xvx4qdeevf4k&dl=0)
+3. `eu_avg_temps.pq` [~582.34KB](https://www.dropbox.com/scl/fi/e4d0h3kam7el7nb7syrzx/eu_avg_temps.pq?rlkey=pusolhe8r17g39fnsjw4vtlz4&dl=0)
+4. `eu_temp_limits.pq` [~23.98KB](https://www.dropbox.com/scl/fi/73pgc9dj4c4xoqbse7fhy/eu_temp_limits.pq?rlkey=bsbpt29bvbd67tbhy632w2btb&dl=0)
 
 World map:
 
@@ -153,8 +146,4 @@ Run the following scripts to generate figures. The resulting figures will be sav
 
 - For Figure 4: Run `age_lag_response_us_mexico.R` -> outputs `lag_age_response.pdf`
 - For Figure 5: Run `by_cause_us_mexico.R` -> outputs `cause.pdf`
-- For Figure 6: Run `us_mex_eu_maps.R` -> outputs `maps/...`
-
-### Expected Output and Runtime
-
-Expected output and expected run time for execution on a normal desktop computer: ...
+- For Figure 6: Run `us_mex_eu_maps.R` -> outputs `county_maps_*`

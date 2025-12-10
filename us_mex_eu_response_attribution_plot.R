@@ -8,9 +8,7 @@ gc()
 
 pacman::p_load(fastverse, tidyverse, arrow, MetBrewer, cowplot, patchwork)
 
-# setwd("~/path/to/temperature-mortality")
-# setwd("~/BurkeLab Dropbox/projects/temperature-mortality-descriptive")
-setwd("~/BurkeLab Dropbox/projects/temperature-mortality")
+setwd("~/path/to/temperature-mortality")
 
 # load(paste(processed_country_dir, paste0(country_name, "AnnualBinned_person_day_exposure.RData"), sep = "/"))
 
