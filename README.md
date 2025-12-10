@@ -1,6 +1,6 @@
 # temperature-mortality
 
-Code repository for "Understanding and addressing temperature impacts on mortality". This repo contains main scripts to replicate main statistical results (Figure 1, 2, 3, S1, S2, and S9) in the paper. The underlying EU and Mexico mortality data are public and provided below with merged temperature data; the US data are restricted use and available by application to the CDC and are not provided.
+Code repository for "Understanding and addressing temperature impacts on mortality". This repo contains main scripts to replicate main statistical results (Figure 1, 2, 3, S1, S2, and S9) in the paper. The underlying EU and Mexico mortality data are public and provided below with merged temperature data; the US data are restricted use and available by application to the CDC and are not provided. This project is licensed under the terms of the MIT license.
 
 ### System Requirements
 
