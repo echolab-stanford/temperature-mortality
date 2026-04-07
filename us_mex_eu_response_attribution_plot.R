@@ -6,84 +6,68 @@
 rm(list = ls())
 gc()
 
-pacman::p_load(fastverse, tidyverse, arrow, MetBrewer, cowplot, patchwork)
+pacman::p_load(fastverse, tidyverse, arrow, MetBrewer, cowplot, patchwork, here)
 
-setwd("~/path/to/temperature-mortality")
+# here::here() resolves paths relative to the .Rproj root — no setwd() needed.
+# Open via temperature-mortality.Rproj to ensure here() works correctly.
 
-# load(paste(processed_country_dir, paste0(country_name, "AnnualBinned_person_day_exposure.RData"), sep = "/"))
+# Load country configuration
+source(here::here("config", "countries.R"))
 
-# # bring in helper functions to perform analysis
-# source(paste(script_dir, "helper_functions.R", sep = "/"))
+read_country_results <- function(country_name, si_folder = NULL) {
 
-read_country_results <- function(country_name, si_folder = NULL){
-  
-  # country_name <- "US"
-  # si_folder <- NULL # log_rate, same_year, age_standardized, or NULL
-  # country_name <- country_name
-  
-  if (!is.null(si_folder)) {
-    processed_country_dir <- paste("processed", country_name, sep = "/")
-    processed_country_dir <- file.path(processed_country_dir, si_folder)
-  } else {
-    processed_country_dir <- paste("processed", country_name, sep = "/")
+  # Validate country against config
+  if (!country_name %in% names(country_config)) {
+    stop("'", country_name, "' not found in config/countries.R. ",
+         "Available: ", paste(names(country_config), collapse = ", "))
   }
-  
-  print(processed_country_dir)
-  pooled_result <- readRDS(  paste(processed_country_dir, paste0(country_name, "_Pooled_results.rds"), sep = "/"))
-  young_result <- readRDS(  paste(processed_country_dir, paste0(country_name, "_Young_results.rds"), sep = "/"))
-  adult_result <- readRDS(  paste(processed_country_dir, paste0(country_name, "_Adult_results.rds"), sep = "/"))
-  elderly_result <- readRDS(  paste(processed_country_dir, paste0(country_name, "_Elderly_results.rds"), sep = "/"))
-  temp_result <- readRDS(  paste(processed_country_dir, paste0(country_name, "_temp_results.rds"), sep = "/"))
-  income_result <- readRDS(  paste(processed_country_dir, paste0(country_name, "_income_results.rds"), sep = "/"))
-  decade_result <- readRDS(  paste(processed_country_dir, paste0(country_name, "_decade_results.rds"), sep = "/"))
-  baseline_result <- readRDS(  paste(processed_country_dir, paste0(country_name, "_baseline_results.rds"), sep = "/"))
-  
-  all_response <- rbind(
-    pooled_result$response, 
-    young_result$response,
-    adult_result$response,
-    elderly_result$response, 
-    temp_result$response, 
-    income_result$response, 
-    decade_result$response, 
-    baseline_result$response
-  )
-  all_response[, country := country_name]
-  
-  all_deaths <- rbind(
-    pooled_result$deaths, 
-    young_result$deaths,
-    adult_result$deaths,
-    elderly_result$deaths,
-    temp_result$deaths, 
-    income_result$deaths, 
-    decade_result$deaths, 
-    baseline_result$deaths
-  )
-  all_deaths[, country := country_name]
-  
-  deaths_by_year_side <- rbind(
-    pooled_result$deaths_by_year_side, 
-    young_result$deaths_by_year_side,
-    adult_result$deaths_by_year_side,
-    elderly_result$deaths_by_year_side,
-    temp_result$deaths_by_year_side, 
-    income_result$deaths_by_year_side, 
-    decade_result$deaths_by_year_side, 
-    baseline_result$deaths_by_year_side
-  )
+
+  # Build path
+  processed_country_dir <- here::here("processed", country_name)
+  if (!is.null(si_folder)) {
+    processed_country_dir <- file.path(processed_country_dir, si_folder)
+  }
+  message("Loading results from: ", processed_country_dir)
+
+  # Determine which model .rds files to load from config
+  models <- country_config[[country_name]]$models_to_run
+
+  results_list <- lapply(setNames(models, models), function(m) {
+    rds_path <- file.path(processed_country_dir,
+                          paste0(country_name, "_", m, "_results.rds"))
+    if (!file.exists(rds_path)) {
+      warning("Missing results file: ", rds_path, " — skipping.")
+      return(NULL)
+    }
+    readRDS(rds_path)
+  })
+
+  # Drop any NULLs (missing files)
+  results_list <- Filter(Negate(is.null), results_list)
+
+  all_response         <- rbindlist(lapply(results_list, `[[`, "response"),         fill = TRUE)
+  all_deaths           <- rbindlist(lapply(results_list, `[[`, "deaths"),           fill = TRUE)
+  deaths_by_year_side  <- rbindlist(lapply(results_list, `[[`, "deaths_by_year_side"), fill = TRUE)
+
+  all_response[,        country := country_name]
+  all_deaths[,          country := country_name]
   deaths_by_year_side[, country := country_name]
-  
-  return(list(response = all_response, deaths = all_deaths, deaths_by_year_side = deaths_by_year_side))
+
+  list(response = all_response, deaths = all_deaths,
+       deaths_by_year_side = deaths_by_year_side)
 }
 
-us <- read_country_results(country_name = "US", si_folder = NULL)
-mex <- read_country_results(country_name = "MEX", si_folder = NULL)
-eu <- read_country_results(country_name = "EU", si_folder = NULL)
+# Load results for all active countries that appear in figs 1–3.
+# To add a new country: activate it in config/countries.R and
+# place its .rds files in processed/<COUNTRY>/.
+fig123_countries <- names(Filter(function(x) all(c(1, 2, 3) %in% x$figs), country_config))
 
-combined_response <- rbind(us$response, mex$response, eu$response)
-combined_deaths <- rbind(us$deaths, mex$deaths, eu$deaths)
-combined_deaths_by_year_side <- rbind(us$deaths_by_year_side, mex$deaths_by_year_side, eu$deaths_by_year_side)
+all_country_results <- lapply(setNames(fig123_countries, fig123_countries),
+                              read_country_results, si_folder = NULL)
+
+combined_response        <- rbindlist(lapply(all_country_results, `[[`, "response"),        fill = TRUE)
+combined_deaths          <- rbindlist(lapply(all_country_results, `[[`, "deaths"),          fill = TRUE)
+combined_deaths_by_year_side <- rbindlist(lapply(all_country_results, `[[`, "deaths_by_year_side"), fill = TRUE)
 
 combined_deaths_by_year_side %>%
   filter(model == "Pooled") %>%
@@ -263,7 +247,7 @@ plot_pooled_fig <- function(pooled_dataframe, deaths_dataframe, si_folder = NULL
 }
 
 fig_1 <- plot_pooled_fig(combined_response, combined_deaths, si_folder = NULL)
-fig_1_dir <- file.path("fig/combined", paste0("fig_1.pdf"))
+fig_1_dir <- here::here("fig", "combined", "fig_1.pdf")
 ggsave(plot = fig_1, filename = fig_1_dir, width = 10, height = 5, units = "in", dpi = 300)
 
 plot_response <- function(response_df, si_folder = NULL) {
@@ -669,19 +653,24 @@ fig_2 <- plot_grid(
   nrow = 3
 )
 
-fig_2_dir <- file.path("fig/combined", paste0("fig_2.pdf"))
+fig_2_dir <- here::here("fig", "combined", "fig_2.pdf")
 ggsave(plot = fig_2, filename = fig_2_dir, width = 12, height = 12, units = "in", dpi = 300)
 
 # ###################################################################################
 # MAIN FIGURE 3
 # ###################################################################################
 
+# TODO: plot_deaths_at_bins() uses a legacy file format
+# (*deaths_by_bins* and *deaths_by_side_year* flat .rds files) that is no
+# longer produced by us_mex_eu_response_attribution.R. It needs to be
+# rewritten to use the `response_by_year_bins` element already present in
+# each *_results.rds file. Skipping auto-execution for now.
 plot_deaths_at_bins <- function(){
-  country_names <- list("US", "EU", "MEX")
+  country_names <- fig123_countries
 
   df_list <- lapply(country_names, function(country_name){
     # country_name <- "US"
-    processed_country_dir <- paste("processed", country_name, sep = "/")
+    processed_country_dir <- here::here("processed", country_name)
     processed_files <- list.files(processed_country_dir)
     group_denominator <- T
 

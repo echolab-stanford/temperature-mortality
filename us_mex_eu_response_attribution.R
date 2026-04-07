@@ -7,8 +7,7 @@ rm(list = ls())
 gc()
 
 # Load required libraries
-pacman::p_boot()
-pacman::p_load(fastverse, tidyverse, arrow, fixest, matrixStats, ISOweek)
+pacman::p_load(fastverse, tidyverse, arrow, fixest, matrixStats, ISOweek, here)
 
 # Set configuration
 setFixest_nthreads(6, save = TRUE)
@@ -17,23 +16,36 @@ setFixest_nthreads(6, save = TRUE)
 # DIRECTORY AND PATH SETUP
 ################################################################################
 
-setwd("~/path/to/temperature-mortality")
-# setwd("~/BurkeLab Dropbox/projects/temperature-mortality")
+# here::here() resolves paths relative to the .Rproj root — no setwd() needed.
+# Open the project via temperature-mortality.Rproj to ensure here() works correctly.
 
-# Define main parameters
-# To replicate analysis, you can set the following parameters
-# outputs from this script will be saved in "processed" folder for respective countries
-# for combined figures, we will run different script
-country_name <- "US" # Other options: EU, MEX
-# if one wants to replicate supplmentary figure inputs
-# options include: log_rate, same_year, age_standardized, data_1990_2023 (only when country_name == MEX) or winsor 
-si_folder <- "winsor" 
+# Load country configuration
+source(here::here("config", "countries.R"))
+
+# ── USER SETTINGS ─────────────────────────────────────────────────────────────
+# Set country_name to one of the keys defined in config/countries.R
+country_name <- "US"  # Options: US, EU, MEX (or any active country in config)
+
+# si_folder controls which sensitivity analysis variant to run.
+# Options: NULL (default/winsor), "log_rate", "same_year", "age_standardized"
+# See README.md § Figure Index for which si_folder maps to which SI figure.
+si_folder <- "winsor"
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Validate country
+if (!country_name %in% names(country_config)) {
+  stop("country_name '", country_name, "' not found in config/countries.R. ",
+       "Available options: ", paste(names(country_config), collapse = ", "))
+}
+
+# Pull country-specific config
+cfg <- country_config[[country_name]]
 
 # Set up directory structure
-data_dir <- 'data'
-cleaned_dir <- paste(data_dir, country_name, "cleaned", sep = "/")
-processed_dir <- 'processed'
-processed_country_dir <- paste(processed_dir, country_name, sep = "/")
+data_dir          <- here::here("data")
+cleaned_dir       <- file.path(data_dir, country_name, "cleaned")
+processed_dir     <- here::here("processed")
+processed_country_dir <- file.path(processed_dir, country_name)
 
 # Load helper functions and data
 # source(paste(script_dir, "helper_functions.R", sep = "/"))
@@ -48,58 +60,40 @@ setDT(daily_temp)
 # COUNTRY-SPECIFIC DATA PREPARATION
 ################################################################################
 
-if (country_name == "EU") {
-  
-  setkeyv(mort, c("adm_id", "year", "week"))
-  setkeyv(temp_bins, c("adm_id", "year", "week"))
+# Pull variables from config
+time_agg_var       <- cfg$time_agg_var
+right_hand_var_list <- cfg$rhs_vars
+right_hand_vars    <- paste(right_hand_var_list, collapse = " + ")
+fixed_effects      <- cfg$fixed_effects
+
+# Set data.table keys based on temporal resolution
+if (time_agg_var == "week") {
+
+  setkeyv(mort,       c("adm_id", "year", "week"))
+  setkeyv(temp_bins,  c("adm_id", "year", "week"))
   setkeyv(daily_temp, c("adm_id", "year", "month", "day"))
-  
-  # create month variable
-  mort[, date := ISOweek2date(sprintf("%d-W%02d-1", year, week))]
+
+  # Create month variable (needed for some downstream steps)
+  mort[, date  := ISOweek2date(sprintf("%d-W%02d-1", year, week))]
   mort[, month := month(date)]
-  
-  # Create lag variables
-  new_lag_names <- c('temp_d1', 'temp_d2', 'temp_d3', 'temp_d4', 'precip_d1', 'precip_d2')
-  weather_polynomial_names <- c('temp_d1_l0','temp_d2_l0','temp_d3_l0','temp_d4_l0', 'precip_d1_l0', 'precip_d2_l0')
-  lags <- 1:4
-  
-  # Generate lag variables using data.table
-  for (lag_value in lags){
-    lag_cols <- paste0(new_lag_names, '_t', lag_value)
-    mort[, (lag_cols) := lapply(.SD, shift, n = lag_value), by = adm_id, .SDcols = weather_polynomial_names]
+
+  # Generate weekly lag variables (EU uses lags t1–t4)
+  new_lag_names            <- c("temp_d1", "temp_d2", "temp_d3", "temp_d4",
+                                "precip_d1", "precip_d2")
+  weather_polynomial_names <- c("temp_d1_l0", "temp_d2_l0", "temp_d3_l0", "temp_d4_l0",
+                                "precip_d1_l0", "precip_d2_l0")
+  for (lag_value in 1:4) {
+    lag_cols <- paste0(new_lag_names, "_t", lag_value)
+    mort[, (lag_cols) := lapply(.SD, shift, n = lag_value),
+         by = adm_id, .SDcols = weather_polynomial_names]
   }
-  
-  # Define model variables for EU
-  right_hand_var_list <- c("temp_d1_l0", "temp_d1_t1", "temp_d1_t2", "temp_d1_t3",
-                           "temp_d2_l0", "temp_d2_t1", "temp_d2_t2", "temp_d2_t3",  
-                           "temp_d3_l0", "temp_d3_t1", "temp_d3_t2", "temp_d3_t3",  
-                           "temp_d4_l0", "temp_d4_t1", "temp_d4_t2", "temp_d4_t3",  
-                           "precip_d1_l0", "precip_d1_t1", "precip_d1_t2", "precip_d1_t3",  
-                           "precip_d2_l0", "precip_d2_t1", "precip_d2_t2", "precip_d2_t3")
-  right_hand_vars <- paste(right_hand_var_list, collapse = " + ")
-  fixed_effects <- "adm_id^year + adm_id^week"
-  
-} else if (country_name %in% c("US", "MEX")) {
-  
-  setkeyv(mort, c("adm_id", "year", "month"))
-  setkeyv(temp_bins, c("adm_id", "year", "month"))
-  setkeyv(daily_temp, c("adm_id", "year", "month", "day"))
-  
-  # # Precompute days_in_month outside the loop
-  # mort[, ndays := days_in_month(paste0(year, '-', month, '-01'))]
-  
-  # Define model variables for US
-  right_hand_var_list <- c("temp_d1_l0", 
-                           "temp_d2_l0", 
-                           "temp_d3_l0", 
-                           "temp_d4_l0", 
-                           "precip_d1_l0",  
-                           "precip_d2_l0")
-  right_hand_vars <- paste(right_hand_var_list, collapse = " + ")
-  fixed_effects <- "adm_id^year + adm_id^month"
-  
+
 } else {
-  message("Country must be: US, EU, or MEX")
+
+  setkeyv(mort,       c("adm_id", "year", "month"))
+  setkeyv(temp_bins,  c("adm_id", "year", "month"))
+  setkeyv(daily_temp, c("adm_id", "year", "month", "day"))
+
 }
 
 
@@ -210,13 +204,16 @@ model_formula_list <- list(
 # MAIN ANALYSIS LOOP
 ################################################################################
 
-# Filter models for same_year analysis
+# Filter model list to only models configured for this country
+model_formula_list <- model_formula_list[names(model_formula_list) %in% cfg$models_to_run]
+
+# Further restrict for same_year sensitivity (pooled only)
 if (si_folder == "same_year") {
-  model_formula_list <- model_formula_list[1]
+  model_formula_list <- model_formula_list["Pooled"]
 }
 
 # Main loop through models
-for (model_name in names(model_formula_list)[1:4]) { 
+for (model_name in names(model_formula_list)) {
 
   # model_name <- "Pooled"
   message("Processing model: ", model_name)

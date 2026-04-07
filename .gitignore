@@ -1,10 +1,28 @@
+# ── Directories (never track data, processed outputs, or generated figures) ──
+data/
+processed/
+fig/
+README_files/
+
+# ── renv library (lock file IS tracked, the library itself is not) ──
+renv/library/
+renv/staging/
+renv/sandbox/
+
+# ── R artifacts ──
+*.Rhistory
+*.RData
+*.Rproj.user/
+
+# ── Generated output files (catch-all for any outside the above dirs) ──
 *.rds
 *.pq
-*.DS_Store
 *.html
 *.pdf
+*.png
+
+# ── Geodata & tabular raw data ──
 *.shp
 *.gpkg
 *.csv
-*.Rhistory
-*.png
+*.DS_Store
