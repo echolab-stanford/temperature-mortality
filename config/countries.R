@@ -29,7 +29,8 @@ country_config <- list(
     ),
     models_to_run = c("Pooled", "Young", "Adult", "Elderly",
                       "temp", "income", "decade", "baseline"),
-    figs          = c(1, 2, 3)
+    figs          = c(1, 2, 3),
+    year_range    = NULL   # NULL = no filter; or c(start, end)
   ),
 
   EU = list(
@@ -45,7 +46,8 @@ country_config <- list(
     ),
     models_to_run = c("Pooled", "Young", "Adult", "Elderly",
                       "temp", "income", "decade", "baseline"),
-    figs          = c(1, 2, 3)
+    figs          = c(1, 2, 3),
+    year_range    = NULL
   ),
 
   MEX = list(
@@ -57,10 +59,11 @@ country_config <- list(
     ),
     models_to_run = c("Pooled", "Young", "Adult", "Elderly",
                       "temp", "income", "decade", "baseline"),
-    figs          = c(1, 2, 3)
-  )
+    figs          = c(1, 2, 3),
+    year_range    = NULL
+  ),
 
-  # ── NEW COUNTRIES (placeholder — fill in once processed data is ready) ────────
+  # ── NEW COUNTRIES ────────
   #
   # Each new country only needs Figs 1–3 and runs the four core age models.
   # Steps to activate:
@@ -70,16 +73,67 @@ country_config <- list(
   #
   # TEMPLATE:
   # ,
-  # BRA = list(
-  #   time_agg_var  = "month",                        # TODO: confirm
-  #   fixed_effects = "adm_id^year + adm_id^month",  # TODO: confirm
-  #   rhs_vars      = c(                              # TODO: confirm
-  #     "temp_d1_l0", "temp_d2_l0", "temp_d3_l0", "temp_d4_l0",
-  #     "precip_d1_l0", "precip_d2_l0"
-  #   ),
-  #   models_to_run = c("Pooled", "Young", "Adult", "Elderly"),
-  #   figs          = c(1, 2, 3)
-  # ),
+  BRA = list(
+    time_agg_var  = "month",                        # TODO: confirm
+    fixed_effects = "adm_id^year + adm_id^month",  # TODO: confirm
+    rhs_vars      = c(                              # TODO: confirm
+      "temp_d1_l0", "temp_d2_l0", "temp_d3_l0", "temp_d4_l0",
+      "precip_d1_l0", "precip_d2_l0"
+    ),
+    models_to_run = c("Pooled", "Young", "Adult", "Elderly",
+                      "temp", "income", "decade", "baseline"),
+    figs          = c(1, 2, 3),
+    year_range    = c(1998, 2019)  # subset to available income data years
+  ),
+
+  # ── REGIONAL POOLS ────────────────────────────────────────────────────────────
+
+  LA = list(
+    time_agg_var  = "month",
+    fixed_effects = "adm_id^year + adm_id^month",
+    rhs_vars      = c(
+      "temp_d1_l0", "temp_d2_l0", "temp_d3_l0", "temp_d4_l0",
+      "precip_d1_l0", "precip_d2_l0"
+    ),
+    models_to_run = c("Pooled"),      # pooled region: Pooled only for now
+    figs          = c(1, 3),          # appears in Fig 1 and Fig 3
+    year_range    = NULL
+  ),
+
+  # ── MULTI-DATASET COUNTRIES ──────────────────────────────────────────────────
+  # Entries below use dataset_tag as the config key (not country_name).
+  # Each entry carries country_name = "THL" so attribution.R knows the actual
+  # country code for file naming and path construction.
+  # figs = c() excludes them from auto-loading in attribution_plot.R until
+  # the preferred dataset is chosen.
+
+  THL_1997_2025 = list(
+    country_name  = "THL",                          # actual country code (for file names / paths)
+    time_agg_var  = "month",
+    fixed_effects = "adm_id^year + adm_id^month",
+    rhs_vars      = c(
+      "temp_d1_l0", "temp_d2_l0", "temp_d3_l0", "temp_d4_l0",
+      "precip_d1_l0", "precip_d2_l0"
+    ),
+    models_to_run = c("Pooled"),
+    figs          = c(),                             # excluded from auto-loading; activate when ready
+    year_range    = NULL
+  ),
+
+  THL_2005_2025 = list(
+    country_name  = "THL",
+    time_agg_var  = "month",
+    # year_str_break included as FE; update formula once FE structure is confirmed
+    fixed_effects = "adm_id^year + adm_id^month",
+    rhs_vars      = c(
+      "temp_d1_l0", "temp_d2_l0", "temp_d3_l0", "temp_d4_l0",
+      "precip_d1_l0", "precip_d2_l0"
+    ),
+    models_to_run = c("Pooled"),
+    figs          = c(),                             # excluded from auto-loading; activate when ready
+    year_range    = NULL
+  )
+
   #
   # CHL = list(
   #   time_agg_var  = "month",

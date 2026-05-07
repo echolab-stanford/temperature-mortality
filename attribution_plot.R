@@ -14,23 +14,36 @@ pacman::p_load(fastverse, tidyverse, arrow, MetBrewer, cowplot, patchwork, here)
 # Load country configuration
 source(here::here("config", "countries.R"))
 
-read_country_results <- function(country_name, si_folder = NULL) {
+read_country_results <- function(config_key, si_folder = NULL) {
 
-  # Validate country against config
-  if (!country_name %in% names(country_config)) {
-    stop("'", country_name, "' not found in config/countries.R. ",
+  # config_key is either a plain country_name (e.g. "BRA") or a dataset_tag
+  # (e.g. "THL_1997_2025") for multi-dataset countries. Both are keys in country_config.
+  if (!config_key %in% names(country_config)) {
+    stop("'", config_key, "' not found in config/countries.R. ",
          "Available: ", paste(names(country_config), collapse = ", "))
   }
 
-  # Build path
-  processed_country_dir <- here::here("processed", country_name)
+  cfg <- country_config[[config_key]]
+
+  # For dataset_tag entries, cfg$country_name is the actual country code used in
+  # file names. For plain country entries, cfg$country_name is NULL so we fall
+  # back to config_key itself.
+  country_name <- if (!is.null(cfg$country_name)) cfg$country_name else config_key
+
+  # Build processed path:
+  #   plain country   → processed/{country}/{si_folder}/
+  #   dataset_tag     → processed/{country}/{dataset_tag}/{si_folder}/
+  if (!is.null(cfg$country_name)) {
+    processed_country_dir <- here::here("processed", country_name, config_key)
+  } else {
+    processed_country_dir <- here::here("processed", config_key)
+  }
   if (!is.null(si_folder)) {
     processed_country_dir <- file.path(processed_country_dir, si_folder)
   }
   message("Loading results from: ", processed_country_dir)
 
-  # Determine which model .rds files to load from config
-  models <- country_config[[country_name]]$models_to_run
+  models <- cfg$models_to_run
 
   results_list <- lapply(setNames(models, models), function(m) {
     rds_path <- file.path(processed_country_dir,
@@ -42,19 +55,25 @@ read_country_results <- function(country_name, si_folder = NULL) {
     readRDS(rds_path)
   })
 
-  # Drop any NULLs (missing files)
   results_list <- Filter(Negate(is.null), results_list)
 
   all_response         <- rbindlist(lapply(results_list, `[[`, "response"),         fill = TRUE)
   all_deaths           <- rbindlist(lapply(results_list, `[[`, "deaths"),           fill = TRUE)
   deaths_by_year_side  <- rbindlist(lapply(results_list, `[[`, "deaths_by_year_side"), fill = TRUE)
 
-  all_response[,        country := country_name]
-  all_deaths[,          country := country_name]
-  deaths_by_year_side[, country := country_name]
+  deaths_by_year_bins_list <- Filter(Negate(is.null), lapply(results_list, `[[`, "deaths_by_year_bins"))
+  deaths_by_year_bins <- if (length(deaths_by_year_bins_list) > 0) rbindlist(deaths_by_year_bins_list, fill = TRUE) else data.table()
+
+  # Label with config_key so dataset variants show as distinct entries in combined plots
+  # (e.g. "THL_1997_2025" vs "THL_2005_2025" rather than both appearing as "THL")
+  all_response[,        country := config_key]
+  all_deaths[,          country := config_key]
+  deaths_by_year_side[, country := config_key]
+  if (nrow(deaths_by_year_bins) > 0) deaths_by_year_bins[, country := config_key]
 
   list(response = all_response, deaths = all_deaths,
-       deaths_by_year_side = deaths_by_year_side)
+       deaths_by_year_side = deaths_by_year_side,
+       deaths_by_year_bins = deaths_by_year_bins)
 }
 
 # Load results for all active countries that appear in figs 1–3.
@@ -68,6 +87,36 @@ all_country_results <- lapply(setNames(fig123_countries, fig123_countries),
 combined_response        <- rbindlist(lapply(all_country_results, `[[`, "response"),        fill = TRUE)
 combined_deaths          <- rbindlist(lapply(all_country_results, `[[`, "deaths"),          fill = TRUE)
 combined_deaths_by_year_side <- rbindlist(lapply(all_country_results, `[[`, "deaths_by_year_side"), fill = TRUE)
+combined_deaths_by_year_bins <- rbindlist(lapply(all_country_results, `[[`, "deaths_by_year_bins"), fill = TRUE)
+
+# Load regional-pool countries that appear in Fig 1 or Fig 3 but not all of 1–3.
+fig1_or_3_extra_countries <- names(Filter(
+  function(x) (1 %in% x$figs | 3 %in% x$figs) & !all(c(1, 2, 3) %in% x$figs),
+  country_config
+))
+fig1_or_3_extra_results <- lapply(setNames(fig1_or_3_extra_countries, fig1_or_3_extra_countries),
+                                  read_country_results, si_folder = NULL)
+
+# Fig 1: response + deaths pools (all countries with fig 1)
+fig1_extra_countries <- names(Filter(function(x) 1 %in% x$figs & !all(c(1, 2, 3) %in% x$figs), country_config))
+fig1_response <- rbindlist(
+  c(lapply(all_country_results, `[[`, "response"),
+    lapply(fig1_or_3_extra_results[fig1_extra_countries], `[[`, "response")),
+  fill = TRUE
+)
+fig1_deaths <- rbindlist(
+  c(lapply(all_country_results, `[[`, "deaths"),
+    lapply(fig1_or_3_extra_results[fig1_extra_countries], `[[`, "deaths")),
+  fill = TRUE
+)
+
+# Fig 3: deaths_by_year_bins includes regional pools with fig 3
+fig3_extra_countries <- names(Filter(function(x) 3 %in% x$figs & !all(c(1, 2, 3) %in% x$figs), country_config))
+fig3_deaths_by_year_bins <- rbindlist(
+  c(list(combined_deaths_by_year_bins),
+    lapply(fig1_or_3_extra_results[fig3_extra_countries], `[[`, "deaths_by_year_bins")),
+  fill = TRUE
+)
 
 combined_deaths_by_year_side %>%
   filter(model == "Pooled") %>%
@@ -102,8 +151,10 @@ plot_pooled_fig <- function(pooled_dataframe, deaths_dataframe, si_folder = NULL
   pooled_response_df <- pooled_dataframe %>% filter(model == "Pooled")
   pooled_deaths_df <- deaths_dataframe %>% filter(model == "Pooled")
   
-  pooled_response_df <- pooled_response_df %>% 
-    mutate(country = factor(country, levels = c("US", "EU", "MEX")))
+  country_order <- c("US", "EU", "MEX", "BRA", "LA", "THL_1997_2025", "THL_2005_2025")
+  present_levels <- intersect(country_order, unique(pooled_response_df$country))
+  pooled_response_df <- pooled_response_df %>%
+    mutate(country = factor(country, levels = present_levels))
   # mutate(country = paste0(country, " (MMT = ", mmt, "°C)"),
   #        country = factor(country, levels = c("US (MMT = 26°C)", "EU (MMT = 20°C)", "MEX (MMT = 24°C)"))) %>%
   
@@ -116,10 +167,10 @@ plot_pooled_fig <- function(pooled_dataframe, deaths_dataframe, si_folder = NULL
         pred_q975 = expm1(pred_q975)
       ) %>% 
       ungroup() %>% 
-      mutate(country = factor(country, level = c("US", "EU", "MEX")))
-    
+      mutate(country = factor(country, levels = present_levels))
+
     y_lab_text <- "Percent change in deaths"
-    
+
   } else if (!is.null(si_folder) && si_folder == "same_year") {
     pooled_response_df <- pooled_response_df %>% 
       mutate(
@@ -144,9 +195,9 @@ plot_pooled_fig <- function(pooled_dataframe, deaths_dataframe, si_folder = NULL
         pred_q975 = pred_q975 * 1e+5
       ) %>% 
       ungroup() %>% 
-      mutate(country = factor(country, level = c("US", "EU", "MEX")))
-    
-    
+      mutate(country = factor(country, levels = present_levels))
+
+
     y_lab_text <- "Change in deaths \n per 100,000 people"
   }
   
@@ -168,14 +219,15 @@ plot_pooled_fig <- function(pooled_dataframe, deaths_dataframe, si_folder = NULL
       )
   }
   
-  unique_levels <- sort(unique(pooled_response_df$country))
-  color_palette <- c("#009988", "#EE7733", "#0072B2")
+  unique_levels <- levels(pooled_response_df$country)
+  color_palette <- c("US" = "#009988", "EU" = "#EE7733", "MEX" = "#0072B2", "BRA" = "#CC79A7", "LA" = "#AA4499",
+                     "THL_1997_2025" = "#E69F00", "THL_2005_2025" = "#56B4E9")
   # color_palette <- rev(met.brewer("Homer1", length(unique_levels)))
   # color_palette <- setNames(c("#1f77b4", "#ff7f0e", "#2ca02c"), unique_levels)
   
   # Create the response plot
   response <- pooled_response_df %>% 
-    filter(pop_deg_days != 0 & !is.na(pop_deg_days)) %>% filter(bins >= t1) %>% 
+    filter(pop_deg_days != 0 & !is.na(pop_deg_days)) %>% filter(bins >= t1 & bins <= t99) %>% 
     ggplot(aes(x = bins)) +
     geom_line(aes(y = pred, color = country), linewidth = 1) +
     geom_ribbon(aes(ymin = pred_q025, ymax = pred_q975, fill = country), alpha = 0.2) +
@@ -204,7 +256,7 @@ plot_pooled_fig <- function(pooled_dataframe, deaths_dataframe, si_folder = NULL
     )
   
   exposure <- pooled_response_df %>% 
-    filter(pop_deg_days != 0 & !is.na(pop_deg_days)) %>% filter(bins >= t1) %>% 
+    filter(pop_deg_days != 0 & !is.na(pop_deg_days)) %>% filter(bins >= t1 & bins <= t99) %>% 
     ggplot(aes(x = bins, weight = pop_deg_days, fill = country, color = country)) +
     geom_density(alpha = 0.3, bw = 1) + 
     scale_color_manual(values = setNames(color_palette, unique_levels)) +
@@ -227,7 +279,7 @@ plot_pooled_fig <- function(pooled_dataframe, deaths_dataframe, si_folder = NULL
   breaks <- c(0, 0.02, 0.04, 0.06, 0.08, 0.10, 0.12, 0.14)
   deaths <- pooled_deaths_df %>% 
     mutate(annual_share_total_mortality = deaths / total_deaths ) %>% 
-    mutate(country = factor(country, levels = c("US", "EU", "MEX"))) %>%
+    mutate(country = factor(country, levels = present_levels)) %>%
     ggplot(aes(x = country, y = annual_share_total_mortality, fill = side)) + 
     geom_bar(stat = 'identity', position = 'stack', width = 0.9, alpha = 1) + 
     scale_fill_manual(values = c("cold" = "#D3D3D3", "hot" = "#FFCC99"), labels = c("cold" = "Cold", "hot" = "Hot"), name = 'Mortality due to ...') + 
@@ -239,6 +291,8 @@ plot_pooled_fig <- function(pooled_dataframe, deaths_dataframe, si_folder = NULL
     ylab('Percent of total annual deaths') +
     theme(
       strip.text.x = element_text(size = 10, face = "bold"),
+      # 45-degree angle for x-axis labels if needed
+      axis.text.x = element_text(size = 10, angle = 45),
       strip.text.y = element_blank(),
       axis.title.x = element_blank()
     )
@@ -246,9 +300,9 @@ plot_pooled_fig <- function(pooled_dataframe, deaths_dataframe, si_folder = NULL
   plot_grid(final_plot, deaths, ncol = 2)
 }
 
-fig_1 <- plot_pooled_fig(combined_response, combined_deaths, si_folder = NULL)
+fig_1 <- plot_pooled_fig(fig1_response, fig1_deaths, si_folder = NULL)
 fig_1_dir <- here::here("fig", "combined", "fig_1.pdf")
-ggsave(plot = fig_1, filename = fig_1_dir, width = 10, height = 5, units = "in", dpi = 300)
+# ggsave(plot = fig_1, filename = fig_1_dir, width = 10, height = 5, units = "in", dpi = 300)
 
 plot_response <- function(response_df, si_folder = NULL) {
   
@@ -411,8 +465,7 @@ plot_response <- function(response_df, si_folder = NULL) {
     #   df <- df %>% filter(bins > 0 & bins < 40)
     # }
 
-    df <- df %>% filter(pop_deg_days != 0 & !is.na(pop_deg_days)) %>% filter(bins >= t1)
-    # df <- df %>% filter(bins >= t1 & bins <= t99)
+    df <- df %>% filter(pop_deg_days != 0 & !is.na(pop_deg_days)) %>% filter(bins >= t1 & bins <= t99)
     response <- df %>% 
       ggplot(aes(x = bins)) +
       geom_line(aes(y = pred, color = key), linewidth = 1) +
@@ -645,77 +698,57 @@ plot3 <- plot_grid(
   rel_heights = c(1, 0.5)
 )
 
+plot4 <- plot_grid(
+  plot_response(combined_response %>% filter(country == "BRA") %>% filter(model != "Pooled"), si_folder = NULL),
+  plot_annual_deaths(combined_deaths %>% filter(country == "BRA") %>% filter(model != "Pooled")),
+  ncol = 1,
+  labels = c("(BRA)"), 
+  label_x = 0, 
+  label_y = 1, 
+  label_size = 10,
+  rel_heights = c(1, 0.5)
+)
+
 fig_2 <- plot_grid(
   plot1, 
   plot2, 
   plot3, 
+  plot4,
   ncol = 1, 
-  nrow = 3
+  nrow = 4
 )
 
 fig_2_dir <- here::here("fig", "combined", "fig_2.pdf")
-ggsave(plot = fig_2, filename = fig_2_dir, width = 12, height = 12, units = "in", dpi = 300)
+# ggsave(plot = fig_2, filename = fig_2_dir, width = 12, height = 16, units = "in", dpi = 300)
 
 # ###################################################################################
 # MAIN FIGURE 3
 # ###################################################################################
 
-# TODO: plot_deaths_at_bins() uses a legacy file format
-# (*deaths_by_bins* and *deaths_by_side_year* flat .rds files) that is no
-# longer produced by us_mex_eu_response_attribution.R. It needs to be
-# rewritten to use the `response_by_year_bins` element already present in
-# each *_results.rds file. Skipping auto-execution for now.
-plot_deaths_at_bins <- function(){
-  country_names <- fig123_countries
+plot_deaths_at_bins <- function(deaths_by_year_bins) {
 
-  df_list <- lapply(country_names, function(country_name){
-    # country_name <- "US"
-    processed_country_dir <- here::here("processed", country_name)
-    processed_files <- list.files(processed_country_dir)
-    group_denominator <- T
-
-    # bring in deaths by bins
-    death_by_bins_files <- processed_files[grepl("deaths_by_bins", processed_files) &
-                                             (grepl("young", processed_files) |
-                                                grepl("adult", processed_files) |
-                                                grepl("elderly", processed_files) |
-                                                grepl("pooled", processed_files))]
-
-    death_by_bins <- lapply(death_by_bins_files, function(file){readRDS(file.path(processed_country_dir, file))})
-    death_by_bins <- do.call(rbind, death_by_bins)
-
-    # total deaths
-    total_deaths_files <- processed_files[(grepl("deaths_by_side_year", processed_files) & !grepl(pattern = "iteration", x = processed_files)) &
-                                            (grepl("young", processed_files) |
-                                               grepl("adult", processed_files) |
-                                               grepl("elderly", processed_files) |
-                                               grepl("pooled", processed_files))]
-    total_deaths <- lapply(total_deaths_files, function(file){readRDS(file.path(processed_country_dir, file))})
-    total_deaths <- do.call(rbind, total_deaths)
-    total_deaths <- distinct(total_deaths[, .(year, annual_total_death, model_name)])
-
-    df <- merge(death_by_bins, total_deaths, by = c("year", "model_name"), all.x = T)
-
-    if (group_denominator) {
-      df <- df %>%
-        filter(deaths != 0 & deaths > 0) %>%
-        mutate(deaths = deaths / annual_total_death) %>%
-        group_by(bins, model_name) %>%
-        summarise(deaths = mean(deaths, na.rm = TRUE), .groups = "drop") %>%
-        ungroup()
-    } else { # denominator is overall total deaths
-      df <- df %>% group_by(year, bins) %>% mutate(annual_total_death = sum(annual_total_death, na.rm = T)) %>% ungroup() %>%
-        filter(deaths != 0 & deaths > 0) %>%
-        mutate(deaths = deaths / annual_total_death) %>%
-        group_by(bins, model_name) %>%
-        summarise(deaths = mean(deaths, na.rm = TRUE), .groups = "drop") %>%
-        ungroup()
-    }
-
-    df$country_name <- country_name
-    return(df)
-  })
-  df <- do.call(rbind, df_list)
+  # AGGREGATION: mean-of-ratios (Method A)
+  #
+  # Step 1 — compute the annual attributable fraction for each (year, bin):
+  #   share_{b,t} = bins_deaths_{b,t} / total_deaths_t
+  # Step 2 — average across years:
+  #   share_b = mean_t( share_{b,t} )
+  #
+  # This answers: "In a typical year, what % of [age-group] deaths are
+  # attributable to temperature bin b?"
+  #
+  # Alternative (ratio-of-sums / Method B) would be:
+  #   sum(bins_deaths) / sum(total_deaths)
+  # That gives a study-period aggregate weighted by high-death years, which
+  # conflates mortality trends with the temperature signal and is NOT used here.
+  df <- as.data.table(deaths_by_year_bins)[
+    model %in% c("Pooled", "Young", "Adult", "Elderly") & bins_deaths > 0
+  ][
+    , deaths := bins_deaths / total_deaths   # annual attributable fraction
+  ][
+    , .(deaths = mean(deaths, na.rm = TRUE)), by = .(bins, model, country)  # average across years
+  ]
+  setnames(df, c("model", "country"), c("model_name", "country_name"))
 
   df <- df %>%
     group_by(model_name, country_name) %>%
@@ -741,7 +774,7 @@ plot_deaths_at_bins <- function(){
   plot <- df %>%
     mutate(model_name = factor(model_name, levels = c("Pooled","Elderly", "Adult", "Young"))) %>%
     arrange(model_name, country_name) %>%
-    mutate(country_name = factor(country_name, levels = c("US", "EU", "MEX"))) %>%
+    mutate(country_name = factor(country_name, levels = c("US", "EU", "MEX", "BRA", "LA"))) %>%
     ggplot(aes(x = bins, y = deaths, fill = model_name)) +
     geom_bar(stat = 'identity', position = 'stack', width = 1, alpha = 1) +
     scale_y_continuous(
@@ -764,17 +797,17 @@ plot_deaths_at_bins <- function(){
 
   return(plot)
 }
-fig_3 <- plot_deaths_at_bins()
+fig_3 <- plot_deaths_at_bins(fig3_deaths_by_year_bins)
 fig_3_dir <- file.path("fig/combined", paste0("fig_3.pdf"))
-ggsave(plot = fig_3, filename = fig_3_dir, width = 10, height = 6, units = "in", dpi = 300)
+# ggsave(plot = fig_3, filename = fig_3_dir, width = 13, height = 6, units = "in", dpi = 300)
 
 ############################################################################
 # SUPPLEMENTARY FIGIRE S1: LOG RATE
 ############################################################################
 
-us_log_rate <- read_country_results(country_name = "US", si_folder = "log_rate")
-eu_log_rate <- read_country_results(country_name = "EU", si_folder = "log_rate")
-mex_log_rate <- read_country_results(country_name = "MEX", si_folder = "log_rate")
+us_log_rate <- read_country_results(config_key = "US", si_folder = "log_rate")
+eu_log_rate <- read_country_results(config_key = "EU", si_folder = "log_rate")
+mex_log_rate <- read_country_results(config_key = "MEX", si_folder = "log_rate")
 
 combined_response_log_rate <- rbind(us_log_rate$response, eu_log_rate$response, mex_log_rate$response)
 combined_death_log_rate <- rbind(us_log_rate$deaths, eu_log_rate$deaths, mex_log_rate$deaths)
@@ -799,8 +832,8 @@ ggsave(plot = log_rate_only_response,
 ############################################################################
 # SUPPLEMENTARY FIGIRE S2: AGE STANDARDIZED RATE (US and MEX)
 ############################################################################
-us_age_standardized <- read_country_results(country_name = "US", si_folder = "age_standardized")
-mex_age_standardized <- read_country_results(country_name = "MEX", si_folder = "age_standardized")
+us_age_standardized <- read_country_results(config_key = "US", si_folder = "age_standardized")
+mex_age_standardized <- read_country_results(config_key = "MEX", si_folder = "age_standardized")
 
 combined_response_age_standardized <- rbind(us_age_standardized$response, mex_age_standardized$response)
 combined_death_age_standardized <- rbind(us_age_standardized$deaths, mex_age_standardized$deaths)
@@ -844,7 +877,7 @@ ggsave(plot = age_std_rate_plot,
 ###################################################################################
 # SUPPLEMENTARY FIGIRE S9: FIXED 1970 DECADE
 ###################################################################################
-country_name = "US"
+config_key = "US"
 processed_country_dir <- paste("processed", country_name, sep = "/")
 model_name <- "decade"
 result_decade <- readRDS(file.path(processed_country_dir, paste0( country_name, "_", "decade", "_results.rds" )))

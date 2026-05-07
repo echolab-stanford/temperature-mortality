@@ -23,35 +23,92 @@ setFixest_nthreads(6, save = TRUE)
 source(here::here("config", "countries.R"))
 
 # ── USER SETTINGS ─────────────────────────────────────────────────────────────
-# Set country_name to one of the keys defined in config/countries.R
-country_name <- "US"  # Options: US, EU, MEX (or any active country in config)
+# country_name: one of the single-dataset keys in config/countries.R
+#   e.g. "US", "EU", "MEX", "BRA", "LA", "PHL", "MYS"
+country_name <- "BRA"
 
-# si_folder controls which sensitivity analysis variant to run.
-# Options: NULL (default/winsor), "log_rate", "same_year", "age_standardized"
-# See README.md § Figure Index for which si_folder maps to which SI figure.
+# dataset_tag: set ONLY for countries with multiple cleaned datasets.
+#   NULL  → single-dataset country; cleaned_dir = data/{country}/cleaned/
+#   "THL_1997_2025" → data/THL/cleaned/THL_1997_2025/  (total deaths, 913 AMCs)
+#   "THL_2005_2025" → data/THL/cleaned/THL_2005_2025/  (age-specific, 920 AMCs)
+dataset_tag <- NULL
+
+# si_folder: sensitivity analysis variant to run on the selected dataset.
+#   NULL (default/winsor), "log_rate", "same_year", "age_standardized"
 si_folder <- "winsor"
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Validate country
-if (!country_name %in% names(country_config)) {
-  stop("country_name '", country_name, "' not found in config/countries.R. ",
+# Resolve config key: dataset_tag when set, else country_name
+config_key <- if (!is.null(dataset_tag)) dataset_tag else country_name
+
+# Validate config key
+if (!config_key %in% names(country_config)) {
+  stop("'", config_key, "' not found in config/countries.R. ",
        "Available options: ", paste(names(country_config), collapse = ", "))
 }
 
 # Pull country-specific config
-cfg <- country_config[[country_name]]
+cfg <- country_config[[config_key]]
+
+# For dataset_tag entries, cfg$country_name holds the actual country code used
+# in file names (e.g. "THL"). Override country_name so all downstream paste0()
+# calls that build file names remain unchanged.
+if (!is.null(cfg$country_name)) country_name <- cfg$country_name
 
 # Set up directory structure
-data_dir          <- here::here("data")
-cleaned_dir       <- file.path(data_dir, country_name, "cleaned")
-processed_dir     <- here::here("processed")
-processed_country_dir <- file.path(processed_dir, country_name)
+data_dir      <- here::here("data")
+processed_dir <- here::here("processed")
+
+if (!is.null(dataset_tag)) {
+  # Multi-dataset country: nest both cleaned input and processed output under dataset_tag
+  cleaned_dir           <- file.path(data_dir,      country_name, "cleaned",   dataset_tag)
+  processed_country_dir <- file.path(processed_dir, country_name, dataset_tag)
+} else {
+  cleaned_dir           <- file.path(data_dir,      country_name, "cleaned")
+  processed_country_dir <- file.path(processed_dir, country_name)
+}
+
+# Ensure base processed directory exists before si_folder logic appends to it
+if (!dir.exists(processed_country_dir)) {
+  dir.create(processed_country_dir, recursive = TRUE, showWarnings = FALSE)
+}
 
 # Load helper functions and data
 # source(paste(script_dir, "helper_functions.R", sep = "/"))
-mort <- read_parquet( paste(cleaned_dir, paste0(country_name, "FullPanel_complete.pq"), sep = "/") )
-temp_bins <- read_parquet( paste(cleaned_dir, paste0(country_name, "TempBins_monthly_complete.pq"), sep = "/") )
-daily_temp <- read_parquet( paste(cleaned_dir, paste0(country_name, "Daily_temp_covariates.pq"), sep = "/") )
+# mort <- read_parquet( paste(cleaned_dir, paste0(country_name, "FullPanel_complete.pq"), sep = "/") )
+# temp_bins <- read_parquet( paste(cleaned_dir, paste0(country_name, "TempBins_monthly_complete.pq"), sep = "/") )
+# daily_temp <- read_parquet( paste(cleaned_dir, paste0(country_name, "Daily_temp_covariates.pq"), sep = "/") )
+
+# mort <- read_parquet( paste(
+#   "/Users/khusel/BurkeLab Dropbox/projects/temperature-mortality-descriptive/data/", country_name, "/cleaned", 
+#   paste0(country_name, "FullPanel_complete.pq"), sep = "/") )
+# temp_bins <- read_parquet( paste(
+#   "/Users/khusel/BurkeLab Dropbox/projects/temperature-mortality-descriptive/data/", country_name, "/cleaned", 
+#   paste0(country_name, "TempBins_monthly_complete.pq"), sep = "/") )
+# daily_temp_cols <- if (length(cfg$models_to_run) == 1 && cfg$models_to_run == "Pooled") {
+#   c("adm_id", "year", "month", "day", "temp1", "temp2", "temp3", "temp4")
+# } else {
+#   NULL  # load all columns for heterogeneity models
+# }
+# daily_temp <- read_parquet(
+#   paste("/Users/khusel/BurkeLab Dropbox/projects/temperature-mortality-descriptive/data/",
+#         country_name, "/cleaned",
+#         paste0(country_name, "Daily_temp_covariates.pq"), sep = "/"),
+#   col_select = if (!is.null(daily_temp_cols)) all_of(daily_temp_cols) else everything()
+# )
+
+mort <- read_parquet(file.path(cleaned_dir, paste0(country_name, "FullPanel_complete.pq")))
+temp_bins <- read_parquet(file.path(cleaned_dir, paste0(country_name, "TempBins_monthly_complete.pq")))
+daily_temp_cols <- if (length(cfg$models_to_run) == 1 && cfg$models_to_run == "Pooled") {
+  c("adm_id", "year", "month", "day", "temp1", "temp2", "temp3", "temp4")
+} else {
+  NULL  # load all columns for heterogeneity models
+}
+daily_temp <- read_parquet(
+  file.path(cleaned_dir, paste0(country_name, "Daily_temp_covariates.pq")),
+  col_select = if (!is.null(daily_temp_cols)) all_of(daily_temp_cols) else everything()
+)
+
 setDT(mort)
 setDT(temp_bins)
 setDT(daily_temp)
@@ -65,6 +122,13 @@ time_agg_var       <- cfg$time_agg_var
 right_hand_var_list <- cfg$rhs_vars
 right_hand_vars    <- paste(right_hand_var_list, collapse = " + ")
 fixed_effects      <- cfg$fixed_effects
+
+# # Year subset (from config; NULL = no filter)
+# if (!is.null(cfg$year_range)) {
+#   message("Subsetting to years ", cfg$year_range[1], "–", cfg$year_range[2])
+#   mort <- mort %>% filter(year >= cfg$year_range[1] & year <= cfg$year_range[2])
+#   daily_temp <- daily_temp %>% filter(year >= cfg$year_range[1] & year <= cfg$year_range[2])
+# }
 
 # Set data.table keys based on temporal resolution
 if (time_agg_var == "week") {
@@ -95,7 +159,6 @@ if (time_agg_var == "week") {
   setkeyv(daily_temp, c("adm_id", "year", "month", "day"))
 
 }
-
 
 ################################################################################
 # ANALYSIS SETUP
@@ -132,27 +195,96 @@ if (si_folder == "log_rate") {
   log_rate <- F
   
 } else if (si_folder == "age_standardized") {
-  
-  # Check if country_name equals "US" or "MEX"
-  if (country_name %in% c("US", "MEX")) {
-    # Set up age-standardized analysis
-    processed_country_dir <- file.path(processed_country_dir, si_folder)
-    
-    if (!dir.exists(processed_country_dir)) {
-      dir.create(processed_country_dir, recursive = FALSE)
-    }
-    
-    mort <- mort %>%
-      mutate(rate_all = age_std_rate) %>%
-      filter(!is.na(age_std_rate)) %>%
-      filter(is.finite(age_std_rate)) # dropping NA and infinity
-    log_rate <- FALSE
-  } else {
-    message("Age-standardized analysis can only be run for US or MEX.")
-  }
 
-  
-}  else if (si_folder == "newdata_agerate_fixed" | si_folder == "newdata_original" | si_folder == "newdata_1990_2023") {
+  # Age-standardized rate (full sample)
+  processed_country_dir <- file.path(processed_country_dir, si_folder)
+  if (!dir.exists(processed_country_dir)) dir.create(processed_country_dir, recursive = FALSE)
+  if (!"age_std_rate" %in% names(mort)) stop("age_std_rate not found in data for country: ", country_name)
+  mort <- mort %>%
+    mutate(rate_all = age_std_rate) %>%
+    filter(!is.na(age_std_rate), is.finite(age_std_rate))
+  log_rate <- FALSE
+
+} else if (si_folder == "age_std_no_agg") {
+
+  # Age-standardized rate; exclude ALL AMCs that have any has_agg_only_deaths == TRUE
+  processed_country_dir <- file.path(processed_country_dir, si_folder)
+  if (!dir.exists(processed_country_dir)) dir.create(processed_country_dir, recursive = FALSE)
+  if ("has_agg_only_deaths" %in% names(mort)) {
+    agg_only_amcs <- mort[has_agg_only_deaths == TRUE, unique(adm_id)]
+    message("Excluding ", length(agg_only_amcs), " AMCs (has_agg_only_deaths == TRUE); ",
+            uniqueN(mort$adm_id) - length(agg_only_amcs), " AMCs remain.")
+    mort       <- mort[!adm_id %in% agg_only_amcs]
+    daily_temp <- daily_temp[!adm_id %in% agg_only_amcs]
+    temp_bins  <- temp_bins[!adm_id %in% agg_only_amcs]
+  } else {
+    message("has_agg_only_deaths not found in data; no AMC exclusion applied.")
+  }
+  if (!"age_std_rate" %in% names(mort)) stop("age_std_rate not found in data for country: ", country_name)
+  mort <- mort %>%
+    mutate(rate_all = age_std_rate) %>%
+    filter(!is.na(age_std_rate), is.finite(age_std_rate))
+  log_rate <- FALSE
+
+} else if (si_folder == "age_std_2014_2025") {
+
+  # Age-standardized rate; 2014-2025 year subset
+  processed_country_dir <- file.path(processed_country_dir, si_folder)
+  if (!dir.exists(processed_country_dir)) dir.create(processed_country_dir, recursive = FALSE)
+  mort       <- mort[year >= 2014]
+  daily_temp <- daily_temp[year >= 2014]
+  temp_bins  <- temp_bins[year >= 2014]
+  if (!"age_std_rate" %in% names(mort)) stop("age_std_rate not found in data for country: ", country_name)
+  mort <- mort %>%
+    mutate(rate_all = age_std_rate) %>%
+    filter(!is.na(age_std_rate), is.finite(age_std_rate))
+  log_rate <- FALSE
+
+} else if (si_folder == "age_std_2005_2012") {
+
+  # Age-standardized rate; 2005-2012 year subset
+  processed_country_dir <- file.path(processed_country_dir, si_folder)
+  if (!dir.exists(processed_country_dir)) dir.create(processed_country_dir, recursive = FALSE)
+  mort       <- mort[year <= 2012]
+  daily_temp <- daily_temp[year <= 2012]
+  temp_bins  <- temp_bins[year <= 2012]
+  if (!"age_std_rate" %in% names(mort)) stop("age_std_rate not found in data for country: ", country_name)
+  mort <- mort %>%
+    mutate(rate_all = age_std_rate) %>%
+    filter(!is.na(age_std_rate), is.finite(age_std_rate))
+  log_rate <- FALSE
+
+} else if (si_folder == "crude_str_fe") {
+
+  # Crude mortality rate; FEs: adm_id^year_str_break + adm_id^pre_post_break^month
+  # year_str_break splits 2013 into 20130 / 20131 (structural break).
+  # pre_post_break: "pre" = through 20130, "post" = 20131 onwards.
+  # Both variables are now in the FullPanel for both THL_1997_2025 and THL_2005_2025.
+  processed_country_dir <- file.path(processed_country_dir, si_folder)
+  if (!dir.exists(processed_country_dir)) dir.create(processed_country_dir, recursive = FALSE)
+
+  mort <- mort %>%
+    mutate(across(starts_with("rate"), ~ fifelse(.x > collapse::fnth(.x, 0.99), collapse::fnth(.x, 0.99), .x))) %>%
+    mutate(mean_income = fifelse(mean_income > collapse::fnth(mean_income, 0.99), collapse::fnth(mean_income, 0.99), mean_income))
+
+  fixed_effects <- "adm_id^year_str_break + adm_id^pre_post_break^month"
+  log_rate <- FALSE
+
+} else if (si_folder == "age_std_2015_str_fe") {
+
+  # Age-standardized rate, full 2005-2025 sample; FEs: adm_id^year_str_break + adm_id^pre_post_break^month
+  processed_country_dir <- file.path(processed_country_dir, si_folder)
+  if (!dir.exists(processed_country_dir)) dir.create(processed_country_dir, recursive = FALSE)
+
+  if (!"age_std_rate" %in% names(mort)) stop("age_std_rate not found in data for country: ", country_name)
+  mort <- mort %>%
+    mutate(rate_all = age_std_rate) %>%
+    filter(!is.na(age_std_rate), is.finite(age_std_rate))
+
+  fixed_effects <- "adm_id^year_str_break + adm_id^pre_post_break^month"
+  log_rate <- FALSE
+
+} else if (si_folder == "newdata_agerate_fixed" | si_folder == "newdata_original" | si_folder == "newdata_1990_2023") {
   
   # Set up age standardized analysis
   processed_country_dir <- file.path(processed_country_dir, si_folder)
@@ -169,6 +301,7 @@ if (si_folder == "log_rate") {
   mort <- mort %>% mutate(across(starts_with("rate"), ~ fifelse(.x >  collapse::fnth(.x, 0.99),  collapse::fnth(.x, 0.99), .x)))
   # winsor income
   mort <- mort %>% mutate(mean_income = fifelse(mean_income>  collapse::fnth(mean_income, 0.99),  collapse::fnth(mean_income, 0.99), mean_income))
+
   log_rate <- F
 }
 
@@ -229,7 +362,10 @@ for (model_name in names(model_formula_list)) {
   ############################################################################
   
   out_dir <- file.path(processed_country_dir, paste0(country_name, "_BootstrapResult_", tolower(model_name), "_n", Nboot, ".rds"))
-  
+  if (!dir.exists(dirname(out_dir))) {
+  dir.create(dirname(out_dir), recursive = TRUE)
+  }
+
   if (!override & file.exists(out_dir)){
     
     message("Loading existing bootstrap results from: ", out_dir)
@@ -283,6 +419,7 @@ for (model_name in names(model_formula_list)) {
     
     message("Saving bootstrap results to: ", out_dir)
     write_rds(bstrap, out_dir)
+    options(warn = 0)
   }
   
   ############################################################################
@@ -369,8 +506,9 @@ for (model_name in names(model_formula_list)) {
     # Find temperature with lowest predicted mortality (MMT)
     mmt <- new_temp_range[which.min(pred_vector[mmt_options])]
     mmt_matrix <- poly(mmt, degree = 4, raw = T)  # Create polynomial terms for MMT
-    pred_temps_scaled <- scale(pred_temps_poly, center = mmt_matrix, scale = FALSE)  # Center temps at MMT
+    pred_temps_scaled <- scale(pred_temps_poly, center = as.numeric(mmt_matrix), scale = FALSE)  # Center temps at MMT
     
+    # Predict mortality response using centered temperatures
     pred_vector <- pred_temps_scaled %*% t(coefs_sum)
     
     # 6. Bootstrap Coefficient Processing
@@ -434,34 +572,50 @@ for (model_name in names(model_formula_list)) {
     # Take average annual person-day exposure and merge with response
     response <- merge(response, annual_pwd_bins[, .(pop_deg_days = mean(pop_deg_days)), by = .(bins)], by = "bins", all.x = TRUE) 
     
-    #   10. Percent of overall annual deaths in each bin
+    #   10. Bin-specific deaths for Fig 3 (temperature attribution histogram)
+    #
+    # AGGREGATION METHOD: mean-of-ratios (Method A)
+    #
+    #   We compute the annual attributable fraction for each temperature bin:
+    #     share_{b,t} = bins_deaths_{b,t} / total_deaths_t
+    #   and then average across years:
+    #     share_b = (1/T) * sum_t( bins_deaths_{b,t} / total_deaths_t )
+    #
+    #   Interpretation: "In a typical year, X% of [age-group] deaths are
+    #   attributable to temperature bin b."
+    #
+    #   NOTE: total_deaths uses the age-specific death variable (death_var), so
+    #   the fraction is relative to the same-age denominator — e.g. adult deaths
+    #   attributable / total adult deaths — not all-cause mortality.
     bstrap_long <- melt(data.table(bins = -50:50, bstrap_result), id.vars = "bins", variable.name = "iteration", value.name = "pred")
-    response_by_year_bins <- bstrap_long[annual_pwd_bins, on = "bins", allow.cartesian = TRUE][, bins_deaths := pred * pop_deg_days]
-    response_by_year_bins <- response_by_year_bins[, .(bins_deaths = mean(bins_deaths), total_deaths = mean(total_deaths)), by = .(bins)] # collapse year and iteration
+    bstrap_year_bins_full <- bstrap_long[annual_pwd_bins, on = "bins", allow.cartesian = TRUE][, bins_deaths := pred * pop_deg_days]
+
+    # deaths_by_year_bins: average bootstrap iterations but KEEP year structure.
+    # The per-year (bins_deaths, total_deaths) pairs are passed to plot_deaths_at_bins(),
+    # which computes the annual ratio and then averages — implementing Method A above.
+    deaths_by_year_bins <- bstrap_year_bins_full[, .(bins_deaths = mean(bins_deaths, na.rm = TRUE), total_deaths = mean(total_deaths, na.rm = TRUE)), by = .(year, bins)]
+    deaths_by_year_bins[, `:=` (key = "pooled", model = model_name)]
+
+    # response_by_year_bins: collapse year AND iteration — used for inline diagnostic plot only.
+    response_by_year_bins <- bstrap_year_bins_full[, .(bins_deaths = mean(bins_deaths), total_deaths = mean(total_deaths)), by = .(bins)]
     response_by_year_bins[, `:=` (key = "pooled", model = model_name, t1 = t1_index, t99 = t99_index)]
-    
-    rm(annual_pwd_bins)
+
+    rm(annual_pwd_bins, bstrap_long, bstrap_year_bins_full)
     gc(full = TRUE)
     
-    response_by_year_bins %>%
-      ggplot(aes(x = bins, y = bins_deaths / total_deaths)) +
-      geom_bar(stat = 'identity', position = 'stack', width = 1, alpha = 1) +
-      scale_y_continuous(
-        labels = scales::percent_format()
-      )
-
     # 11. Hot/Cold Day Classification
-    # Classify days as hot (>MMT) or cold (<=MMT)
-    narrow_panel <- daily_temp[, side := fifelse(temp1 > mmt, "hot", "cold")]
-    
-    # 12. Prepare aggregated panel
-    narrow_panel <- narrow_panel[!is.na(side), .(
-      temp1 = sum(temp1), 
-      temp2 = sum(temp2), 
-      temp3 = sum(temp3), 
-      temp4 = sum(temp4), 
+    # Classify in-place (no copy) to avoid duplicating the 53M-row daily_temp.
+    daily_temp[, side := fifelse(temp1 > mmt, "hot", "cold")]
+
+    # 12. Prepare aggregated panel — aggregate immediately, then drop the side column.
+    narrow_panel <- daily_temp[!is.na(side), .(
+      temp1 = sum(temp1),
+      temp2 = sum(temp2),
+      temp3 = sum(temp3),
+      temp4 = sum(temp4),
       ndays = .N
     ), by = c("adm_id", "year", time_agg_var, "side")]
+    daily_temp[, side := NULL]
     
     #   12. Merge Population/Death Data  
     narrow_panel <- merge(narrow_panel, mort %>% select(adm_id, year, all_of(time_agg_var), pop = all_of(pop_var), n_deaths = all_of(death_var)), by = c("adm_id", "year", time_agg_var))
@@ -475,31 +629,32 @@ for (model_name in names(model_formula_list)) {
     #   14. Number of estimated deaths   
     if (log_rate == TRUE) {
       # transform back to level
-      typical_rate <- mean(mort %>% group_by(get(time_agg_var)) %>% pull(outcome_var), na.rm = TRUE)
+      typical_rate <- mean(mort[[outcome_var]], na.rm = TRUE)
       # bstrap_deaths <- sweep(expm1(bstrap_deaths), 1, narrow_panel$pop, "*") * typical_rate
       bstrap_deaths <- expm1(bstrap_deaths)*narrow_panel$pop*typical_rate
     } else (
       bstrap_deaths <- sweep(bstrap_deaths, 1, narrow_panel$pop, "*")
     )
     
-    # create narrow panel and bootstrap panel
-    bstrap_deaths <- as.data.table(bstrap_deaths)
-    colnames(bstrap_deaths) <- paste0("b", 1:100)
-    narrow_panel <- cbind(narrow_panel, bstrap_deaths)
-    
-    # aggregate annual deaths 
+    # aggregate annual deaths
     annual_total_deaths <- mort[, .(total_deaths = sum(get(death_var), na.rm = TRUE)), by = .(year)]
-    
-    # deaths by year and side
-    deaths_by_year_side <- narrow_panel[, lapply(.SD, sum, na.rm=TRUE), by=.(year, side), .SDcols=colnames(bstrap_deaths)]
 
-    deaths_by_year_side[, deaths := rowMeans(.SD, na.rm=TRUE), .SDcols = colnames(bstrap_deaths)]
-    deaths_by_year_side[, deaths_q025 := apply(.SD, 1, quantile, probs=0.025, na.rm=TRUE), .SDcols = colnames(bstrap_deaths)]
-    deaths_by_year_side[, deaths_q975 := apply(.SD, 1, quantile, probs=0.975, na.rm=TRUE), .SDcols = colnames(bstrap_deaths)]
-
-    deaths_by_year_side[, key := "pooled"]
-    deaths_by_year_side[, model := model_name]
-    deaths_by_year_side <- merge(deaths_by_year_side, annual_total_deaths, by=c("year"), all.x=TRUE)
+    # deaths by year and side: for each (year, side) group, colSums the bootstrap matrix
+    # then summarise across bootstrap iterations — identical to the old wide-DT approach
+    groups <- narrow_panel[, .(row_idx = list(.I)), by = .(year, side)]
+    deaths_by_year_side <- rbindlist(lapply(seq_len(nrow(groups)), function(i) {
+      boot_sums <- colSums(bstrap_deaths[groups$row_idx[[i]], , drop = FALSE], na.rm = TRUE)
+      data.table(
+        year        = groups$year[i],
+        side        = groups$side[i],
+        deaths      = mean(boot_sums, na.rm = TRUE),
+        deaths_q025 = quantile(boot_sums, 0.025, na.rm = TRUE, names = FALSE),
+        deaths_q975 = quantile(boot_sums, 0.975, na.rm = TRUE, names = FALSE)
+      )
+    }))
+    rm(bstrap_deaths, groups)
+    deaths_by_year_side[, `:=`(key = "pooled", model = model_name)]
+    deaths_by_year_side <- merge(deaths_by_year_side, annual_total_deaths, by = "year", all.x = TRUE)
     deaths_by_year_side <- deaths_by_year_side[, .(year, side, deaths, deaths_q025, deaths_q975, key, model, total_deaths)]
 
     # deaths_by_year_side <- narrow_panel %>%
@@ -525,6 +680,7 @@ for (model_name in names(model_formula_list)) {
     #   15. Final Output  
     out <- list(
       response_by_year_bins = response_by_year_bins, # Temperature-mort response by year and bins
+      deaths_by_year_bins   = deaths_by_year_bins,   # Per-year per-bin deaths (for Fig 3)
       response = response,  # Temperature-mortality curve
       deaths = deaths,       # Hot/cold death estimates
       deaths_by_year_side = deaths_by_year_side # Annual hot/cold death estimates
@@ -625,8 +781,12 @@ for (model_name in names(model_formula_list)) {
       prc_mmt_options <- which(pred_temp_range > t1_index & pred_temp_range < t99_index)
       prc_new_temp_range <- pred_temp_range[prc_mmt_options]
       mmt <- prc_new_temp_range[which.min(current_pred[prc_mmt_options])]
+      
+      # Guard: skip quantiles with no valid temp range (empty mmt)
+      if (length(mmt) == 0 || length(current_observed_temp) == 0) return(NULL)
+      
       mmt_matrix <- poly(mmt, degree = 4, raw = T)
-      bst_pred_temps_scaled <- scale(pred_temps_poly, center = mmt_matrix, scale = FALSE)
+      bst_pred_temps_scaled <- scale(pred_temps_poly, center = as.numeric(mmt_matrix), scale = FALSE)
       
       # Calculate coefficients
       bst_quantile_treated <- nth_evaluation*current_quantile_value
@@ -709,25 +869,24 @@ for (model_name in names(model_formula_list)) {
         bstrap_deaths <- sweep(bstrap_deaths, 1, current_narrow_panel$pop, "*")
       )
       
-      bstrap_deaths <- as.data.table(bstrap_deaths)
-      colnames(bstrap_deaths) <- paste0("b", 1:100)
-      current_narrow_panel <- cbind(current_narrow_panel, bstrap_deaths)
-      
-      # aggregate annual deaths 
+      # aggregate annual deaths
       annual_total_deaths <- adm_year_pop_death[, .(total_deaths = sum(n_deaths, na.rm = TRUE)), by = .(year)]
-      
-      # deaths by year and side
-      deaths_by_year_side <- current_narrow_panel %>% 
-        group_by(year, side) %>% 
-        summarise(across(starts_with("b"), ~sum(.x, na.rm = T)), .groups = "drop") %>% 
-        ungroup() %>% group_by(year, side) %>%  
-        summarise(
-          deaths = mean(c_across(starts_with("b")), na.rm = TRUE),
-          deaths_q025 = quantile(c_across(starts_with("b")), 0.025, na.rm = TRUE),
-          deaths_q975 = quantile(c_across(starts_with("b")), 0.975, na.rm = TRUE), 
-          .groups = "drop"
-        ) %>% 
-        mutate(key = current_quantile, model = model_name) %>% left_join(annual_total_deaths) %>% as.data.table()
+
+      # deaths by year and side: group row indices, colSums bootstrap matrix per group
+      groups <- current_narrow_panel[, .(row_idx = list(.I)), by = .(year, side)]
+      deaths_by_year_side <- rbindlist(lapply(seq_len(nrow(groups)), function(i) {
+        boot_sums <- colSums(bstrap_deaths[groups$row_idx[[i]], , drop = FALSE], na.rm = TRUE)
+        data.table(
+          year        = groups$year[i],
+          side        = groups$side[i],
+          deaths      = mean(boot_sums, na.rm = TRUE),
+          deaths_q025 = quantile(boot_sums, 0.025, na.rm = TRUE, names = FALSE),
+          deaths_q975 = quantile(boot_sums, 0.975, na.rm = TRUE, names = FALSE)
+        )
+      }))
+      rm(bstrap_deaths, groups)
+      deaths_by_year_side[, `:=`(key = current_quantile, model = model_name)]
+      deaths_by_year_side <- merge(deaths_by_year_side, annual_total_deaths, by = "year", all.x = TRUE)
       
       # deaths by side 
       deaths <- deaths_by_year_side[, .(          # Aggregate by year and hot/cold
@@ -742,6 +901,7 @@ for (model_name in names(model_formula_list)) {
         
       })
     
+    final <- Filter(Negate(is.null), final)
     out <- list(
       response = rbindlist(lapply(final, `[[`, "response")), 
       deaths = rbindlist(lapply(final, `[[`, "deaths")), 
@@ -798,7 +958,7 @@ for (model_name in names(model_formula_list)) {
         
         mmt <- new_temp_range[which.min(pred_vector[mmt_options])]
         mmt_matrix <- poly(mmt, degree = 4, raw = TRUE)
-        pred_temps_scaled <- scale(pred_temps_poly, center = mmt_matrix, scale = FALSE)
+        pred_temps_scaled <- scale(pred_temps_poly, center = as.numeric(mmt_matrix), scale = FALSE)
         
         # Bootstrap coefficients
         temp_cols <- names(bstrap)[grepl("temp", names(bstrap)) & grepl(as.character(decade_key), names(bstrap))]
@@ -880,25 +1040,24 @@ for (model_name in names(model_formula_list)) {
           bstrap_deaths <- sweep(bstrap_deaths, 1, current_narrow_panel$pop, "*")
         )
         
-        bstrap_deaths <- as.data.table(bstrap_deaths)
-        colnames(bstrap_deaths) <- paste0("b", 1:100)
-        current_narrow_panel <- cbind(current_narrow_panel, bstrap_deaths)
-        
-        # aggregate annual deaths 
+        # aggregate annual deaths
         annual_total_deaths <- adm_year_pop_death[, .(total_deaths = sum(n_deaths, na.rm = TRUE)), by = .(year)]
-        
-        # deaths by year and side
-        deaths_by_year_side <- current_narrow_panel %>% 
-          group_by(year, side) %>% 
-          summarise(across(starts_with("b"), ~sum(.x, na.rm = T))) %>% 
-          ungroup() %>% group_by(year, side) %>%  
-          summarise(
-            deaths = mean(c_across(starts_with("b")), na.rm = TRUE),
-            deaths_q025 = quantile(c_across(starts_with("b")), 0.025, na.rm = TRUE),
-            deaths_q975 = quantile(c_across(starts_with("b")), 0.975, na.rm = TRUE), 
-            .groups = "drop"
-          ) %>% 
-          mutate(key = as.character(decade_key), model = model_name) %>% left_join(annual_total_deaths) %>% as.data.table()
+
+        # deaths by year and side: group row indices, colSums bootstrap matrix per group
+        groups <- current_narrow_panel[, .(row_idx = list(.I)), by = .(year, side)]
+        deaths_by_year_side <- rbindlist(lapply(seq_len(nrow(groups)), function(i) {
+          boot_sums <- colSums(bstrap_deaths[groups$row_idx[[i]], , drop = FALSE], na.rm = TRUE)
+          data.table(
+            year        = groups$year[i],
+            side        = groups$side[i],
+            deaths      = mean(boot_sums, na.rm = TRUE),
+            deaths_q025 = quantile(boot_sums, 0.025, na.rm = TRUE, names = FALSE),
+            deaths_q975 = quantile(boot_sums, 0.975, na.rm = TRUE, names = FALSE)
+          )
+        }))
+        rm(bstrap_deaths, groups)
+        deaths_by_year_side[, `:=`(key = as.character(decade_key), model = model_name)]
+        deaths_by_year_side <- merge(deaths_by_year_side, annual_total_deaths, by = "year", all.x = TRUE)
         
         # deaths by side 
         deaths <- deaths_by_year_side[, .(          # Aggregate by year and hot/cold
@@ -909,181 +1068,60 @@ for (model_name in names(model_formula_list)) {
         ), by = .(side)][, key := as.character(decade_key)][, model := model_name] 
         
         
-        list(response = response, deaths = deaths, deaths_by_year_side = deaths_by_year_side)
+        # Fixed-1970 counterfactual: reuse pred_mat + mmt_matrix from this iteration;
+        # only swap bootstrap coefs to 1970. US-only, non-log-rate.
+        deaths_fixed1970              <- NULL
+        deaths_by_year_side_fixed1970 <- NULL
+        if (country_name == "US" & !log_rate) {
+          temp_cols_1970 <- names(bstrap)[grepl("temp", names(bstrap)) & grepl("1970", names(bstrap))]
+          bst_coefs_before_sum_1970 <- as.matrix(bstrap[, ..temp_cols_1970])
+          bst_coefs_sum_1970 <- sapply(poly_groups, function(poly) {
+            poly_names <- colnames(bst_coefs_before_sum_1970)[grepl(poly, colnames(bst_coefs_before_sum_1970)) & !grepl("prec", colnames(bst_coefs_before_sum_1970))]
+            rowSums(bst_coefs_before_sum_1970[, poly_names, drop = FALSE])
+          })
+
+          bstrap_deaths_1970 <- sweep(pred_mat %*% t(bst_coefs_sum_1970), 1, current_narrow_panel$pop, "*")
+
+          groups_1970 <- current_narrow_panel[, .(row_idx = list(.I)), by = .(year, side)]
+          deaths_by_year_side_fixed1970 <- rbindlist(lapply(seq_len(nrow(groups_1970)), function(i) {
+            boot_sums <- colSums(bstrap_deaths_1970[groups_1970$row_idx[[i]], , drop = FALSE], na.rm = TRUE)
+            data.table(
+              year        = groups_1970$year[i],
+              side        = groups_1970$side[i],
+              deaths      = mean(boot_sums, na.rm = TRUE),
+              deaths_q025 = quantile(boot_sums, 0.025, na.rm = TRUE, names = FALSE),
+              deaths_q975 = quantile(boot_sums, 0.975, na.rm = TRUE, names = FALSE)
+            )
+          }))
+          rm(bstrap_deaths_1970, groups_1970)
+          deaths_by_year_side_fixed1970[, `:=`(key = as.character(decade_key), model = model_name)]
+          deaths_by_year_side_fixed1970 <- merge(deaths_by_year_side_fixed1970, annual_total_deaths, by = "year", all.x = TRUE)
+
+          deaths_fixed1970 <- deaths_by_year_side_fixed1970[, .(
+            total_deaths = mean(total_deaths, na.rm = TRUE),
+            deaths_q025  = mean(deaths_q025,  na.rm = TRUE),
+            deaths       = mean(deaths,        na.rm = TRUE),
+            deaths_q975  = mean(deaths_q975,  na.rm = TRUE)
+          ), by = .(side)][, key := as.character(decade_key)][, model := model_name]
+        }
+
+        list(response = response, deaths = deaths, deaths_by_year_side = deaths_by_year_side,
+             deaths_fixed1970 = deaths_fixed1970, deaths_by_year_side_fixed1970 = deaths_by_year_side_fixed1970)
       })
-      
+
       # Combine results from all decades
       out <- list(
-        response = rbindlist(lapply(decade_results, `[[`, "response")), 
-        deaths = rbindlist(lapply(decade_results, `[[`, "deaths")),
+        response            = rbindlist(lapply(decade_results, `[[`, "response")),
+        deaths              = rbindlist(lapply(decade_results, `[[`, "deaths")),
         deaths_by_year_side = rbindlist(lapply(decade_results, `[[`, "deaths_by_year_side"))
       )
-      
-      # Decade attributable deaths if response function was fixed at 1970
-      # with decade specific mmt
+
+      # Save fixed-1970 counterfactual (US only, non-log-rate)
       if (country_name == "US" & !log_rate) {
-        pop_var <- "pop_all"              # Default: All populations
-        death_var <- "n_deaths_all"
-        
-        decade_fixed1970 <- lapply(decades, function(decade_key) {
-          
-          fixed_decade <- 1970
-          print(paste("Processing decade:", decade_key))
-          
-          current_mort <- mort[decade == decade_key]  
-          
-          if (country_name == "EU") {
-            time_agg_var <- "week"
-            adm_year_pop_death <- current_mort[, .(adm_id, year, week, pop = get(pop_var), n_deaths = get(death_var))]
-          } else {
-            time_agg_var <- "month"
-            adm_year_pop_death <- current_mort[, .(adm_id, year, month, pop = get(pop_var), n_deaths = get(death_var))]
-          }
-          
-          current_narrow_panel <- daily_temp[decade == decade_key]
-          current_observed_temp <- current_narrow_panel$temp1
-          
-          decade_cols <- names(coefs)[grepl("temp", names(coefs)) & grepl(as.character(decade_key), names(coefs))]
-          
-          coefs_before_sum <- t(as.matrix(coefs[decade_cols]))
-          # Cumulative effect of lags and keep matrix format
-          poly_groups <- c("temp_d1", "temp_d2", "temp_d3", "temp_d4")
-          coefs_sum <- sapply(poly_groups, function(poly) {
-            poly_names <- colnames(coefs_before_sum)[grepl(poly, colnames(coefs_before_sum)) & !grepl("prec", colnames(coefs_before_sum))]
-            rowSums(coefs_before_sum[, poly_names, drop = FALSE])
-          })
-          
-          coefs_sum <- t(as.matrix(coefs_sum))
-          pred_vector <- pred_temps_poly %*% t(coefs_sum)
-          
-          # Crop predictions by 1% and 99% percentile of observed temp distribution
-          t1_index <- quantile(current_observed_temp, 0.01, na.rm = TRUE) 
-          t99_index <- quantile(current_observed_temp, 0.998, na.rm = TRUE)
-          mmt_options <- which(pred_temp_range > t1_index & pred_temp_range < t99_index)
-          new_temp_range <- pred_temp_range[mmt_options]
-          
-          mmt <- new_temp_range[which.min(pred_vector[mmt_options])]
-          mmt_matrix <- poly(mmt, degree = 4, raw = TRUE)
-          pred_temps_scaled <- scale(pred_temps_poly, center = mmt_matrix, scale = FALSE)
-          
-          # Bootstrap coefficients
-          temp_cols <- names(bstrap)[grepl("temp", names(bstrap)) & grepl(as.character(fixed_decade), names(bstrap))]
-          bst_coefs_before_sum <- bstrap[, ..temp_cols]
-          bst_coefs_before_sum <- as.matrix(bst_coefs_before_sum)
-          
-          # Sum coefficients by poly group (vectorized)
-          poly_groups <- c("temp_d1", "temp_d2", "temp_d3", "temp_d4")
-          bst_coefs_sum <- sapply(poly_groups, function(poly) {
-            poly_names = colnames(bst_coefs_before_sum)[grepl(poly, colnames(bst_coefs_before_sum)) & !grepl("prec", colnames(bst_coefs_before_sum))]
-            rowSums(bst_coefs_before_sum[, poly_names, drop = FALSE])
-          })
-          
-          bstrap_result <- pred_temps_scaled %*% t(bst_coefs_sum)
-          
-          # Calculate response statistics (vectorized)
-          response_stats <- cbind(
-            matrixStats::rowQuantiles(bstrap_result, probs = c(0.025, 0.5, 0.975), na.rm = TRUE),
-            mean = matrixStats::rowMeans2(bstrap_result, na.rm = TRUE)
-          )
-          
-          response <- data.table(
-            pred_q025 = response_stats[, 1],
-            pred = response_stats[, 4],  # Using mean
-            pred_q975 = response_stats[, 3],
-            bins = pred_temp_range
-          )[, `:=` (
-            key = as.character(decade_key),
-            model = model_name,
-            t1 = t1_index,
-            t99 = t99_index
-          )]
-          
-          #   9. Add annual average person days exposure
-          midpoints <- (pred_temp_range[-1] + pred_temp_range[-length(pred_temp_range)]) / 2
-          midpoints <- as.character(midpoints)
-          cols <- c("adm_id", "year", time_agg_var, pop_var)
-          pwd <- merge( current_mort[, ..cols], temp_bins, by = c("adm_id", "year", time_agg_var) )
-          setnames(pwd, pop_var, "pop")
-          pwd <- pwd[!is.na(pop)]
-          
-          pwd[, (midpoints) := lapply(.SD, function(x) x * pop), .SDcols = midpoints]
-          pwd <- pwd[, lapply(.SD, sum), .SDcols = midpoints, by = .(year)]
-          annual_pwd <- pwd[, lapply(.SD, mean), .SDcols = midpoints]
-          annual_pwd <- melt(annual_pwd, measure.vars = midpoints, variable.name = "bins", value.name = "pop_deg_days", na.rm = TRUE)
-          annual_pwd[, bins := ceiling(as.numeric(as.character(bins)))]
-          response <- merge(response, annual_pwd, by = "bins", all.x = T)
-          
-          rm(pwd, annual_pwd)
-          gc()
-          
-          # create side indicator in relation to mmt
-          current_narrow_panel[, side := fifelse(temp1 > mmt, "hot", "cold")]
-          
-          #   12. Prepare aggregated panel  
-          current_narrow_panel <- current_narrow_panel[!is.na(side), .(
-            temp1 = sum(temp1), 
-            temp2 = sum(temp2), 
-            temp3 = sum(temp3), 
-            temp4 = sum(temp4), 
-            ndays = .N
-          ), by = c("adm_id", "year", time_agg_var, "side")]
-          
-          #   12. Merge Population/Death Data  
-          current_narrow_panel <- merge(current_narrow_panel, adm_year_pop_death, by = c("adm_id", "year", time_agg_var))
-          
-          #   13. Death Prediction via Bootstrap  
-          temp_cols <- paste0("temp", 1:4)
-          pred_mat <- as.matrix(current_narrow_panel[, ..temp_cols])
-          pred_mat <- pred_mat - matrix(current_narrow_panel$ndays %o% t(mmt_matrix), ncol = 4)  # Scale by days
-          bstrap_deaths <- pred_mat %*% t(bst_coefs_sum)
-          
-          #   14. Number of estimated deaths   
-          if (log_rate == TRUE) {
-            # transform back to level
-            typical_rate <- mean(current_mort %>% pull(outcome_var), na.rm = TRUE)
-            bstrap_deaths <- sweep(expm1(bstrap_deaths), 1, current_narrow_panel$pop, "*") * typical_rate
-          } else (
-            bstrap_deaths <- sweep(bstrap_deaths, 1, current_narrow_panel$pop, "*")
-          )
-          
-          bstrap_deaths <- as.data.table(bstrap_deaths)
-          colnames(bstrap_deaths) <- paste0("b", 1:100)
-          current_narrow_panel <- cbind(current_narrow_panel, bstrap_deaths)
-          
-          # aggregate annual deaths 
-          annual_total_deaths <- adm_year_pop_death[, .(total_deaths = sum(n_deaths, na.rm = TRUE)), by = .(year)]
-          
-          # deaths by year and side
-          deaths_by_year_side <- current_narrow_panel %>% 
-            group_by(year, side) %>% 
-            summarise(across(starts_with("b"), ~sum(.x, na.rm = T))) %>% 
-            ungroup() %>% group_by(year, side) %>%  
-            summarise(
-              deaths = mean(c_across(starts_with("b")), na.rm = TRUE),
-              deaths_q025 = quantile(c_across(starts_with("b")), 0.025, na.rm = TRUE),
-              deaths_q975 = quantile(c_across(starts_with("b")), 0.975, na.rm = TRUE), 
-              .groups = "drop"
-            ) %>% 
-            mutate(key = as.character(decade_key), model = model_name) %>% left_join(annual_total_deaths) %>% as.data.table()
-          
-          # deaths by side 
-          deaths <- deaths_by_year_side[, .(          # Aggregate by year and hot/cold
-            total_deaths = mean(total_deaths, na.rm = TRUE),  # Average across years
-            deaths_q025 = mean(deaths_q025, na.rm = TRUE),
-            deaths = mean(deaths, na.rm = TRUE),
-            deaths_q975 = mean(deaths_q975, na.rm = TRUE)
-          ), by = .(side)][, key := as.character(decade_key)][, model := model_name] 
-          
-          
-          list(response = response, deaths = deaths, deaths_by_year_side = deaths_by_year_side)
-        })
-        
         decade_fixed1970_out <- list(
-          response = rbindlist(lapply(decade_fixed1970, `[[`, "response")), 
-          deaths = rbindlist(lapply(decade_fixed1970, `[[`, "deaths")),
-          deaths_by_year_side = rbindlist(lapply(decade_fixed1970, `[[`, "deaths_by_year_side"))
+          deaths              = rbindlist(Filter(Negate(is.null), lapply(decade_results, `[[`, "deaths_fixed1970"))),
+          deaths_by_year_side = rbindlist(Filter(Negate(is.null), lapply(decade_results, `[[`, "deaths_by_year_side_fixed1970")))
         )
-        
         decade_fixed1970_out_file <- file.path(processed_country_dir, paste0(country_name, "_", model_name, "_fixed1970_results.rds"))
         saveRDS(decade_fixed1970_out, decade_fixed1970_out_file)
       }
